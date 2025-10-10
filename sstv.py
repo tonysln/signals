@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import numpy as np
 from PIL import Image
 from typing import TypedDict
+import math
+import struct
 
 # https://www.sstv-handbook.com/download/sstv_03.pdf
 # https://www.sstv-handbook.com/download/sstv_04.pdf
@@ -81,39 +82,37 @@ class Encoder():
         self.enc = MODES[mode]
         self.phase = 0.0
         self.SR = samp_rate
+        self.A = 32767
         self.f = f
         self.first_line_done = False
 
 
-    def generate_tone(self, f_hz, t_ms, chunk_size=4096):
-        t_s = t_ms / 1000.0
-        total_samples = int(self.SR * t_s)
-        phase_inc = 2 * np.pi * f_hz / self.SR
+    def generate_tone(self, f_hz, t_ms):
+        total_samples = int(self.SR * (t_ms / 1000.0))
+        phase_inc = 2 * math.pi * f_hz / self.SR
 
-        samples_written = 0
-        while samples_written < total_samples:
-            n = min(chunk_size, total_samples - samples_written)
-            t = self.phase + np.arange(n) * phase_inc
-            chunk = np.sin(t)
-            self.phase = (t[-1] + phase_inc) % (2 * np.pi) # TODO
-            pcm16 = (chunk * 32767).astype(np.int16)
-            self.f.write(pcm16.tobytes())
-            
-            samples_written += n
+        b = b''
+        i = 0
+        while i < total_samples:
+            sample = max(-self.A, min(self.A, int(self.A * math.sin(self.phase))))
+            self.phase = (self.phase + phase_inc) % (2 * math.pi)
+            b += struct.pack('<h', sample)
+            i += 1
 
-        return samples_written
+        # print(b)
+        self.f.write(b)
+
+        return i
 
 
-    def encode_line(self, line):
-        # TODO
+    def encode_line(self, line, w):
         if self.mode == 'Martin_M1':
             self.generate_tone(f_hz=self.enc['f_sync'], t_ms=self.enc['t_sync'])
             self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
 
-            # G*256, B*256, R*256
-            for j in [1, 2, 0]:
-                for i in range(0, 256):
-                    f_l = (line[i, j] * (self.enc['f_white'] - self.enc['f_black'])) / self.enc['lum_max']
+            for j in [1, 2, 0]: # GBR
+                for i in range(0, w):
+                    f_l = (line[i*3 + j] * (self.enc['f_white'] - self.enc['f_black'])) / self.enc['lum_max']
                     self.generate_tone(f_hz=self.enc['f_black']+f_l, t_ms=self.enc['t_pixel'])
 
                 self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
@@ -125,10 +124,9 @@ class Encoder():
 
             self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
 
-            # G*256, B*256, R*256
-            for j in [1, 2, 0]:
-                for i in range(0, 256):
-                    f_l = (line[i, j] * (self.enc['f_white'] - self.enc['f_black'])) / self.enc['lum_max']
+            for j in [1, 2, 0]: # GBR
+                for i in range(0, w):
+                    f_l = (line[i*3 + j] * (self.enc['f_white'] - self.enc['f_black'])) / self.enc['lum_max']
                     self.generate_tone(f_hz=self.enc['f_black']+f_l, t_ms=self.enc['t_pixel'])
 
                 if j == 2:
@@ -138,9 +136,9 @@ class Encoder():
                     self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
 
 
-    def encode_image(self, data):
-        for y in range(data.shape[0]):
-            self.encode_line(data[y])
+    def encode_image(self, data, h, w):
+        for y in range(h):
+            self.encode_line(data[y*w*3 : (y+1)*w*3], w)
 
 
     def generate_header(self):
@@ -170,7 +168,7 @@ def encode(img_path, out_path, mode):
     f = open(out_path, 'wb')
     assert mode in MODES
 
-    e = Encoder(f, mode, samp_rate=22050)
+    e = Encoder(f, mode)
 
     # 1. Calibration header
     e.generate_header()
@@ -181,9 +179,13 @@ def encode(img_path, out_path, mode):
     # 3. RGB Scanlines
     img = Image.open(img_path).convert('RGB')
     img.thumbnail((e.enc['width'],e.enc['height']))
+    w, h = img.size
 
-    data = np.asarray(img, dtype=np.float32)
-    e.encode_image(data)
+    assert w <= e.enc['width']
+    assert h <= e.enc['height']
+
+    data = memoryview(img.tobytes())
+    e.encode_image(data, h, w)
 
     e.__del__()
     if not f.closed:
