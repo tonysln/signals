@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 from PIL import Image
-from typing import TypedDict
 import math
 import struct
+import sys
+import array
 
 # https://www.sstv-handbook.com/download/sstv_03.pdf
 # https://www.sstv-handbook.com/download/sstv_04.pdf
@@ -11,129 +12,38 @@ import struct
 # https://web.archive.org/web/20241227121817/http://www.barberdsp.com/downloads/Dayton%20Paper.pdf
 
 
-class EncodingProtocol(TypedDict):
-    lum_max: float
-    f_white: float
-    f_black: float
-    f_sync: float
-    t_sync: float
-    t_1: float
-    f_1: float
-    t_pixel: float
-    f_head_hi: float
-    f_head_lo: float
-    t_head_hi: float
-    t_head_lo: float
-    vis_code: list
-    parity: bool
-    width: int
-    height: int
-
-
-martinM1: EncodingProtocol = {
-    'lum_max': 255,
-    'f_white': 2300,
-    'f_black': 1500,
-    'f_sync': 1200,
-    't_sync': 4.862,
-    't_1': 0.572,
-    'f_1': 1500,
-    't_pixel': 0.572,
-    'f_head_hi': 1900,
-    'f_head_lo': 1200,
-    't_head_hi': 300,
-    't_head_lo': 10,
-    'vis_code': [0,1,0,1,1,0,0],
-    'parity': True,
-    'width': 320,
-    'height': 256
-}
-
-scottieS1: EncodingProtocol = {
-    'lum_max': 255,
-    'f_white': 2300,
-    'f_black': 1500,
-    'f_sync': 1200,
-    't_sync': 9,
-    't_1': 1.5,
-    'f_1': 1500,
-    't_pixel': 0.4320,
-    'f_head_hi': 1900,
-    'f_head_lo': 1200,
-    't_head_hi': 300,
-    't_head_lo': 10,
-    'vis_code': [0,1,1,1,1,0,0],
-    'parity': True,
-    'width': 320,
-    'height': 256
-}
-
-MODES = {
-    'Martin_M1': martinM1,
-    'Scottie_S1': scottieS1
-}
-
-
 class Encoder():
-    def __init__(self, f, mode='Martin_M1', samp_rate=44100):
-        assert mode in MODES
-
-        self.mode = mode
-        self.enc = MODES[mode]
+    def __init__(self, f, samp_rate=44100):
         self.phase = 0.0
         self.SR = samp_rate
         self.A = 32767
-        self.f = f
-        self.first_line_done = False
+        self.file = f
+
+        self.lum_max = 255
+        self.lum_w_hz = 2300
+        self.lum_b_hz = 1500
+        self.mf = 1.0
+
+
+    def set_samp_rate(self, samp_rate):
+        self.SR = samp_rate
+        print(f'[!] Using sample rate: {self.SR}')
 
 
     def generate_tone(self, f_hz, t_ms):
-        total_samples = int(self.SR * (t_ms / 1000.0))
+        total_samples = int(self.SR * (t_ms / 1000.0 * self.mf))
         phase_inc = 2 * math.pi * f_hz / self.SR
 
-        b = b''
+        b = array.array('h', [0]*total_samples)
         i = 0
         while i < total_samples:
             sample = max(-self.A, min(self.A, int(self.A * math.sin(self.phase))))
             self.phase = (self.phase + phase_inc) % (2 * math.pi)
-            b += struct.pack('<h', sample)
+            b[i] = sample
             i += 1
 
-        # print(b)
-        self.f.write(b)
-
+        self.file.write(b.tobytes())
         return i
-
-
-    def encode_line(self, line, w):
-        if self.mode == 'Martin_M1':
-            self.generate_tone(f_hz=self.enc['f_sync'], t_ms=self.enc['t_sync'])
-            self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
-
-            for j in [1, 2, 0]: # GBR
-                for i in range(0, w):
-                    f_l = (line[i*3 + j] * (self.enc['f_white'] - self.enc['f_black'])) / self.enc['lum_max']
-                    self.generate_tone(f_hz=self.enc['f_black']+f_l, t_ms=self.enc['t_pixel'])
-
-                self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
-
-        elif self.mode == 'Scottie_S1':
-            if not self.first_line_done:
-                self.generate_tone(f_hz=self.enc['f_sync'], t_ms=self.enc['t_sync'])
-                self.first_line_done = True
-
-            self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
-
-            for j in [1, 2, 0]: # GBR
-                for i in range(0, w):
-                    f_l = (line[i*3 + j] * (self.enc['f_white'] - self.enc['f_black'])) / self.enc['lum_max']
-                    self.generate_tone(f_hz=self.enc['f_black']+f_l, t_ms=self.enc['t_pixel'])
-
-                if j == 2:
-                    self.generate_tone(f_hz=self.enc['f_sync'], t_ms=self.enc['t_sync'])
-
-                if j != 0:
-                    self.generate_tone(f_hz=self.enc['f_1'], t_ms=self.enc['t_1'])
 
 
     def encode_image(self, data, h, w):
@@ -142,9 +52,9 @@ class Encoder():
 
 
     def generate_header(self):
-        self.generate_tone(f_hz=self.enc['f_head_hi'], t_ms=self.enc['t_head_hi'])
-        self.generate_tone(f_hz=self.enc['f_head_lo'], t_ms=self.enc['t_head_lo'])
-        self.generate_tone(f_hz=self.enc['f_head_hi'], t_ms=self.enc['t_head_hi'])
+        self.generate_tone(f_hz=1900, t_ms=300)
+        self.generate_tone(f_hz=1200, t_ms=10)
+        self.generate_tone(f_hz=1900, t_ms=300)
 
 
     def generate_VIS(self):
@@ -154,29 +64,127 @@ class Encoder():
             hz = 1100 if bit else 1300
             self.generate_tone(f_hz=hz, t_ms=30)
         
-        hz = 1300 if self.enc['parity'] else 1100
+        even_parity = sum(self.enc['vis_code']) % 2 == 0
+        hz = 1300 if even_parity else 1100
         self.generate_tone(f_hz=hz, t_ms=30) # parity bit
         self.generate_tone(f_hz=1200, t_ms=30) # stop bit
 
 
     def __del__(self):
-        self.f.close()
+        self.file.close()
+
+
+class MartinEncoder(Encoder):
+    def __init__(self, f, mode='M1'):
+        self.opts = {
+            'M1': {
+                't_pixel': 0.4576,
+                'vis_code': [0,1,0,1,1,0,0],
+                'width': 320,
+                'height': 256
+            },
+            'M2': {
+                't_pixel': 0.2288,
+                'vis_code': [0,1,0,1,0,0,0],
+                'width': 320,
+                'height': 256
+            }
+        }
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f)
+        print(f'[.] Using MartinEncoder with mode {mode}')
+        self.sync_hz = 1300
+        self.sync_ms = 4.862
+        self.t1_hz = 1500
+        self.t1_ms = 0.572
+
+
+    def encode_line(self, line, w):
+        self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+        self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
+
+        for j in [1, 2, 0]: # GBR
+            for i in range(0, w):
+                f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
+
+            self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
+
+
+class ScottieEncoder(Encoder):
+    def __init__(self, f, mode='S1'):
+        self.opts = {
+            'S1': {
+                't_pixel': 0.4320,
+                'vis_code': [0,1,1,1,1,0,0],
+                'width': 320,
+                'height': 256
+            },
+            'S2': {
+                't_pixel': 0.2752,
+                'vis_code': [0,1,1,1,0,0,0],
+                'width': 320,
+                'height': 256
+            },
+            'DX': {
+                't_pixel': 1.0800,
+                'vis_code': [1,0,0,1,1,0,0],
+                'width': 320,
+                'height': 256
+            }
+        }
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f)
+        print(f'[.] Using ScottieEncoder with mode {mode}')
+        self.first_line_done = False
+        self.sync_hz = 1200
+        self.sync_ms = 9
+        self.t1_hz = 1500
+        self.t1_ms = 1.5
+
+
+    def encode_line(self, line, w):
+        if not self.first_line_done:
+            self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+            self.first_line_done = True
+
+        self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
+
+        for j in [1, 2, 0]: # GBR
+            for i in range(0, w):
+                f_l = (line[i*3 + j] * (self.lum_w_hz- self.lum_b_hz)) / self.lum_max
+                self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
+
+            if j == 2:
+                self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+
+            if j != 0:
+                self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
 
 
 
-def encode(img_path, out_path, mode):
+ENCODERS = {
+    'Martin': MartinEncoder,
+    'Scottie': ScottieEncoder
+}
+
+
+def encode(img_path, out_path, encoding, mode, sr=None):
+    assert encoding in ENCODERS
+
     f = open(out_path, 'wb')
-    assert mode in MODES
+    e = ENCODERS[encoding](f, mode)
 
-    e = Encoder(f, mode)
+    if sr:
+        e.set_samp_rate(sr)
 
-    # 1. Calibration header
     e.generate_header()
-
-    # 2. VIS code
     e.generate_VIS()
 
-    # 3. RGB Scanlines
     img = Image.open(img_path).convert('RGB')
     img.thumbnail((e.enc['width'],e.enc['height']))
     w, h = img.size
@@ -196,8 +204,36 @@ def decode(data, mode):
     pass
 
 
-encode(img_path='test1.png', out_path='test1_m1.pcm', mode='Martin_M1')
-encode(img_path='test1.png', out_path='test1_s1.pcm', mode='Scottie_S1')
-print('Done.')
+if __name__ == '__main__':
+    assert len(sys.argv) > 3
 
-# ffmpeg -f s16le -ar 22050 -ac 2 -i test.pcm -f alsa default 
+    args = sys.argv[1:]
+
+    func = None
+    img_path = None
+    out_path = None
+    encoding = None
+    mode = None
+    sr = None
+    for arg in args:
+        if arg in ['--encode', '--decode']:
+            func = arg
+            img_path = args[args.index(arg)+1]
+        elif arg == '--out':
+            out_path = args[args.index(arg)+1]
+        elif arg == '--encoding':
+            encoding = args[args.index(arg)+1]
+        elif arg == '--mode':
+            mode = args[args.index(arg)+1]
+        elif arg == '--sr':
+            sr = int(args[args.index(arg)+1])
+
+    if img_path and out_path and encoding and mode:
+        if func == '--encode':
+            print(f'[.] Encoding {img_path}...')
+            encode(img_path, out_path, encoding, mode, sr)
+            print(f'[+] Wrote output to {out_path}')
+
+    print('Done.')
+
+# ffmpeg -f s16le -ar 22050 -ac 1 -i test.pcm -f alsa default 
