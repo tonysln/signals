@@ -6,6 +6,7 @@ import struct
 import sys
 import array
 import wave
+from functools import lru_cache
 
 # https://www.sstv-handbook.com/download/sstv_03.pdf
 # https://www.sstv-handbook.com/download/sstv_04.pdf
@@ -115,7 +116,8 @@ class MartinEncoder(Encoder):
 
         for j in [1, 2, 0]: # GBR
             for i in range(0, w):
-                f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                # f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
             self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
@@ -165,7 +167,8 @@ class ScottieEncoder(Encoder):
 
         for j in [1, 2, 0]: # GBR
             for i in range(0, w):
-                f_l = (line[i*3 + j] * (self.lum_w_hz- self.lum_b_hz)) / self.lum_max
+                # f_l = (line[i*3 + j] * (self.lum_w_hz- self.lum_b_hz)) / self.lum_max
+                f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
             if j == 2:
@@ -203,7 +206,8 @@ class WrasseEncoder(Encoder):
 
         for j in [0, 1, 2]: # RGB
             for i in range(0, w):
-                f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                # f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
 
@@ -255,7 +259,8 @@ class PasokonEncoder(Encoder):
 
         for j in [0, 1, 2]: # RGB
             for i in range(0, w):
-                f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                # f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
             self.generate_tone(f_hz=self.enc['t1_hz'], t_ms=self.enc['t1_ms'])
@@ -293,15 +298,94 @@ class PDEncoder(Encoder):
 class RobotEncoder(Encoder):
     opts = {
         '36': {
-            'vis_code': [0,0,0,1,0,0,0]
+            'vis_code': [0,0,0,1,0,0,0],
+            'width': 320,
+            'height': 240,
+            'esep_hz': 1500,
+            'y_scan_ms': 0.275,
+            'ry_scan_ms': 0.1375,
+            'by_scan_ms': 0.1375
         },
         '72': {
-            'vis_code': [0,0,0,1,1,0,0]
+            'vis_code': [0,0,0,1,1,0,0],
+            'width': 320,
+            'height': 240,
+            'y_scan_ms': 0.43125,
+            'ry_scan_ms': 0.215625,
+            'by_scan_ms': 0.215625
         }
     }
 
-    def __init__(self, f, mode='36', sr=44100):
-        pass
+    def __init__(self, f, wav, mode='36', sr=44100):
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f, wav, sr)
+        print(f'[.] Using RobotEncoder with mode {mode}')
+        self.sync_hz = 1200
+        self.sync_ms = 9
+        self.t1_hz = 1500
+        self.t1_ms = 3
+        self.t2_hz = 1900
+        self.t2_ms = 1.5
+        self.t3_hz = 1500
+        self.t3_ms = 1.5
+        self.esep_hz = 1500
+        self.esep_ms = 4.5
+        self.osep_hz = 2300
+        self.osep_ms = 4.5
+        self.odd_line = False
+
+
+    @lru_cache
+    def rgb_to_y(self, R, G, B):
+        return 16.0 + (0.003906 * ((65.738 * R) + (129.057 * G) + (25.064 * B)))
+
+    @lru_cache
+    def rgb_to_ry(self, R, G, B):
+        return 128.0 + (0.003906 * ((112.439 * R) + (-94.154 * G) + (-18.285 * B)))
+
+    @lru_cache
+    def rgb_to_by(self, R, G, B):
+        return 128.0 + (0.003906 * ((-37.945 * R) + (-74.494 * G) + (112.439 * B)))
+
+
+    def encode_line(self, line, w):
+        self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+        self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
+
+        for i in range(0, w):
+            y = self.rgb_to_y(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+            self.generate_tone(f_hz=self.lum_b_hz+y, t_ms=self.enc['y_scan_ms'])
+
+        if self.mode == '36':
+            if self.odd_line:
+                self.generate_tone(f_hz=self.osep_hz, t_ms=self.osep_ms)
+                self.generate_tone(f_hz=self.t2_hz, t_ms=self.t2_ms)
+                for i in range(0, w):
+                    b_y = self.rgb_to_by(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                    self.generate_tone(f_hz=self.lum_b_hz+b_y, t_ms=self.enc['by_scan_ms'])
+            else:    
+                self.generate_tone(f_hz=self.esep_hz, t_ms=self.esep_ms)
+                self.generate_tone(f_hz=self.t2_hz, t_ms=self.t2_ms)
+                for i in range(0, w):
+                    r_y = self.rgb_to_ry(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                    self.generate_tone(f_hz=self.lum_b_hz+r_y, t_ms=self.enc['ry_scan_ms'])
+
+            self.odd_line = not self.odd_line
+
+        elif self.mode == '72':
+            self.generate_tone(f_hz=self.esep_hz, t_ms=self.esep_ms)
+            self.generate_tone(f_hz=self.t2_hz, t_ms=self.t2_ms)
+            for i in range(0, w):
+                r_y = self.rgb_to_ry(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                self.generate_tone(f_hz=self.lum_b_hz+r_y, t_ms=self.enc['ry_scan_ms'])
+
+            self.generate_tone(f_hz=self.osep_hz, t_ms=self.osep_ms)
+            self.generate_tone(f_hz=self.t3_hz, t_ms=self.t3_ms)
+            for i in range(0, w):
+                b_y = self.rgb_to_by(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                self.generate_tone(f_hz=self.lum_b_hz+b_y, t_ms=self.enc['by_scan_ms'])
 
 
 class FAXEncoder(Encoder):
@@ -346,7 +430,8 @@ class FAXEncoder(Encoder):
         for i in range(0, w):
             # wacky RGB->monochrome conversion
             mono = 0.3*line[i*3] + 0.59*line[i*3 + 1] + 0.11*line[i*3 + 2] 
-            f_l = (mono * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+            # f_l = (mono * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+            f_l = mono * 3.1372549
             self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
 
@@ -362,7 +447,8 @@ ENCODERS = {
     'Scottie': ScottieEncoder,
     'Wrasse': WrasseEncoder,
     'Pasokon': PasokonEncoder,
-    'FAX': FAXEncoder
+    'FAX': FAXEncoder,
+    'Robot': RobotEncoder
 }
 
 
@@ -374,14 +460,22 @@ def encode(img_path, out_path, encoding, mode, sr=44100, wav=True):
     else:
         f = open(out_path, 'wb')
 
-    e = ENCODERS[encoding](f, wav, mode, sr)
+    try:
+        e = ENCODERS[encoding](f, wav, mode, sr)
+    except AssertionError:
+        print(f'[!] Unknown encoder or mode provided!')
+        sys.exit(1)
 
     img = Image.open(img_path).convert('RGB')
     img.thumbnail((e.enc['width'],e.enc['height']))
     w, h = img.size
+    ew,eh = e.enc['width'], e.enc['height']
 
-    assert w <= e.enc['width']
-    assert h <= e.enc['height']
+    # Fill image if smaller
+    if (w,h) != (ew,eh):
+        new = Image.new('RGB', (ew,eh), (255, 255, 255))
+        new.paste(img, ((ew - w) // 2, (eh - h) // 2))
+        img = new
 
     e.generate_header()
 
