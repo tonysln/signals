@@ -5,6 +5,7 @@ import math
 import struct
 import sys
 import array
+import wave
 
 # https://www.sstv-handbook.com/download/sstv_03.pdf
 # https://www.sstv-handbook.com/download/sstv_04.pdf
@@ -13,21 +14,23 @@ import array
 
 
 class Encoder():
-    def __init__(self, f, samp_rate=44100):
+    def __init__(self, f, wave=True, samp_rate=44100):
         self.phase = 0.0
         self.SR = samp_rate
         self.A = 32767
         self.file = f
+        self.wav = wave
 
         self.lum_max = 255
         self.lum_w_hz = 2300
         self.lum_b_hz = 1500
         self.mf = 1.0
 
-
-    def set_samp_rate(self, samp_rate):
-        self.SR = samp_rate
-        print(f'[!] Using sample rate: {self.SR}')
+        if self.wav:
+            print('[+] Writing output as WAV')
+            self.file.setparams((1, 2, self.SR, 0, 'NONE', 'Uncompressed'))
+        else:
+            print('[!] Writing output as raw PCM samples')
 
 
     def generate_tone(self, f_hz, t_ms):
@@ -42,7 +45,11 @@ class Encoder():
             b[i] = sample
             i += 1
 
-        self.file.write(b.tobytes())
+        if not self.wav:
+            self.file.write(b.tobytes())
+        else:
+            self.file.writeframes(b.tobytes())
+
         return i
 
 
@@ -70,10 +77,6 @@ class Encoder():
         self.generate_tone(f_hz=1200, t_ms=30) # stop bit
 
 
-    def generate_wav_header(self):
-        pass
-
-
     def __del__(self):
         self.file.close()
 
@@ -94,11 +97,11 @@ class MartinEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='M1'):
+    def __init__(self, f, wav, mode='M1', sr=44100):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
-        super().__init__(f)
+        super().__init__(f, wav, sr)
         print(f'[.] Using MartinEncoder with mode {mode}')
         self.sync_hz = 1300
         self.sync_ms = 4.862
@@ -140,11 +143,11 @@ class ScottieEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='S1'):
+    def __init__(self, f, wav, mode='S1', sr=44100):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
-        super().__init__(f)
+        super().__init__(f, wav, sr)
         print(f'[.] Using ScottieEncoder with mode {mode}')
         self.first_line_done = False
         self.sync_hz = 1200
@@ -182,11 +185,11 @@ class WrasseEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='SC2-180'):
+    def __init__(self, f, wav, mode='SC2-180', sr=44100):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
-        super().__init__(f)
+        super().__init__(f, wav, sr)
         print(f'[.] Using WrasseEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 5.5225
@@ -238,11 +241,11 @@ class PasokonEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='P3'):
+    def __init__(self, f, wav, mode='P3', sr=44100):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
-        super().__init__(f)
+        super().__init__(f, wav, sr)
         print(f'[.] Using PasokonEncoder with mode {mode}')
 
 
@@ -283,7 +286,7 @@ class PDEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='PD50'):
+    def __init__(self, f, mode='PD50', sr=44100):
         pass
 
 
@@ -297,7 +300,7 @@ class RobotEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='36'):
+    def __init__(self, f, mode='36', sr=44100):
         pass
 
 
@@ -311,11 +314,11 @@ class FAXEncoder(Encoder):
         }
     }
 
-    def __init__(self, f, mode='FAX480'):
+    def __init__(self, f, wav, mode='FAX480', sr=44100):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
-        super().__init__(f)
+        super().__init__(f, wav, sr)
         print(f'[.] Using FAXEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 5.12
@@ -348,6 +351,12 @@ class FAXEncoder(Encoder):
 
 
 
+class Decoder():
+    def __init__(self, f, wave=True, samp_rate=44100):
+        pass
+
+
+
 ENCODERS = {
     'Martin': MartinEncoder,
     'Scottie': ScottieEncoder,
@@ -357,14 +366,15 @@ ENCODERS = {
 }
 
 
-def encode(img_path, out_path, encoding, mode, sr=None):
+def encode(img_path, out_path, encoding, mode, sr=44100, wav=True):
     assert encoding in ENCODERS
 
-    f = open(out_path, 'wb')
-    e = ENCODERS[encoding](f, mode)
+    if wav:
+        f = wave.open(out_path, 'wb')
+    else:
+        f = open(out_path, 'wb')
 
-    if sr:
-        e.set_samp_rate(sr)
+    e = ENCODERS[encoding](f, wav, mode, sr)
 
     img = Image.open(img_path).convert('RGB')
     img.thumbnail((e.enc['width'],e.enc['height']))
@@ -384,7 +394,7 @@ def encode(img_path, out_path, encoding, mode, sr=None):
     e.encode_image(data, h, w)
 
     e.__del__()
-    if not f.closed:
+    if not wav and not f.closed:
         f.close()
 
 
@@ -413,7 +423,8 @@ if __name__ == '__main__':
     out_path = None
     encoding = None
     mode = None
-    sr = None
+    sr = 44100
+    wav = True
     for arg in args:
         if arg in ['--encode', '--decode']:
             func = arg
@@ -425,13 +436,15 @@ if __name__ == '__main__':
         elif arg == '--mode':
             mode = args[args.index(arg)+1]
         elif arg == '--sr':
-            sr = int(args[args.index(arg)+1])            
+            sr = int(args[args.index(arg)+1])
+        elif arg == '--raw':
+            wav = False
 
 
     if img_path and out_path and encoding and mode:
         if func == '--encode':
             print(f'[.] Encoding {img_path}...')
-            encode(img_path, out_path, encoding, mode, sr)
+            encode(img_path, out_path, encoding, mode, sr, wav)
             print(f'[+] Wrote output to {out_path}')
 
     print('Done.')
