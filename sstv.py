@@ -70,26 +70,31 @@ class Encoder():
         self.generate_tone(f_hz=1200, t_ms=30) # stop bit
 
 
+    def generate_wav_header(self):
+        pass
+
+
     def __del__(self):
         self.file.close()
 
 
 class MartinEncoder(Encoder):
-    def __init__(self, f, mode='M1'):
-        self.opts = {
-            'M1': {
-                't_pixel': 0.4576,
-                'vis_code': [0,1,0,1,1,0,0],
-                'width': 320,
-                'height': 256
-            },
-            'M2': {
-                't_pixel': 0.2288,
-                'vis_code': [0,1,0,1,0,0,0],
-                'width': 320,
-                'height': 256
-            }
+    opts = {
+        'M1': {
+            't_pixel': 0.4576,
+            'vis_code': [0,1,0,1,1,0,0],
+            'width': 320,
+            'height': 256
+        },
+        'M2': {
+            't_pixel': 0.2288,
+            'vis_code': [0,1,0,1,0,0,0],
+            'width': 320,
+            'height': 256
         }
+    }
+
+    def __init__(self, f, mode='M1'):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
@@ -114,27 +119,28 @@ class MartinEncoder(Encoder):
 
 
 class ScottieEncoder(Encoder):
-    def __init__(self, f, mode='S1'):
-        self.opts = {
-            'S1': {
-                't_pixel': 0.4320,
-                'vis_code': [0,1,1,1,1,0,0],
-                'width': 320,
-                'height': 256
-            },
-            'S2': {
-                't_pixel': 0.2752,
-                'vis_code': [0,1,1,1,0,0,0],
-                'width': 320,
-                'height': 256
-            },
-            'DX': {
-                't_pixel': 1.0800,
-                'vis_code': [1,0,0,1,1,0,0],
-                'width': 320,
-                'height': 256
-            }
+    opts = {
+        'S1': {
+            't_pixel': 0.4320,
+            'vis_code': [0,1,1,1,1,0,0],
+            'width': 320,
+            'height': 256
+        },
+        'S2': {
+            't_pixel': 0.2752,
+            'vis_code': [0,1,1,1,0,0,0],
+            'width': 320,
+            'height': 256
+        },
+        'DX': {
+            't_pixel': 1.0800,
+            'vis_code': [1,0,0,1,1,0,0],
+            'width': 320,
+            'height': 256
         }
+    }
+
+    def __init__(self, f, mode='S1'):
         assert mode in self.opts
         self.mode = mode
         self.enc = self.opts[self.mode]
@@ -166,10 +172,188 @@ class ScottieEncoder(Encoder):
                 self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
 
 
+class WrasseEncoder(Encoder):
+    opts = {
+        'SC2-180': {
+            't_pixel': 0.7344,
+            'vis_code': [0,1,1,0,1,1,1],
+            'width': 320,
+            'height': 256
+        }
+    }
+
+    def __init__(self, f, mode='SC2-180'):
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f)
+        print(f'[.] Using WrasseEncoder with mode {mode}')
+        self.sync_hz = 1200
+        self.sync_ms = 5.5225
+        self.t1_hz = 1500
+        self.t1_ms = 0.5
+
+
+    def encode_line(self, line, w):
+        self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+        self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
+
+        for j in [0, 1, 2]: # RGB
+            for i in range(0, w):
+                f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
+
+
+class PasokonEncoder(Encoder):
+    opts = {
+        'P3': {
+            't_pixel': 0.2083,
+            'vis_code': [1,1,1,0,0,0,1],
+            'width': 640,
+            'height': 496,
+            'sync_hz': 1200,
+            'sync_ms': 5.208,
+            't1_hz': 1500,
+            't1_ms': 1.042
+        },
+        'P5': {
+            't_pixel': 0.3125,
+            'vis_code': [1,1,1,0,0,1,0],
+            'width': 640,
+            'height': 496,
+            'sync_hz': 1200,
+            'sync_ms': 7.813,
+            't1_hz': 1500,
+            't1_ms': 1.563
+        },
+        'P7': {
+            't_pixel': 0.4167,
+            'vis_code': [1,1,1,0,0,1,1],
+            'width': 640,
+            'height': 496,
+            'sync_hz': 1200,
+            'sync_ms': 10.417,
+            't1_hz': 1500,
+            't1_ms': 2.083
+        }
+    }
+
+    def __init__(self, f, mode='P3'):
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f)
+        print(f'[.] Using PasokonEncoder with mode {mode}')
+
+
+    def encode_line(self, line, w):
+        self.generate_tone(f_hz=self.enc['sync_hz'], t_ms=self.enc['sync_ms'])
+        self.generate_tone(f_hz=self.enc['t1_hz'], t_ms=self.enc['t1_ms'])
+
+        for j in [0, 1, 2]: # RGB
+            for i in range(0, w):
+                f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+                self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
+
+            self.generate_tone(f_hz=self.enc['t1_hz'], t_ms=self.enc['t1_ms'])
+
+
+class PDEncoder(Encoder):
+    opts = {
+        'PD50': {
+            'vis_code': [1,0,1,1,1,0,1]
+        },
+        'PD90': {
+            'vis_code': [1,1,0,0,0,1,1]
+        },
+        'PD120': {
+            'vis_code': [1,0,1,1,1,1,1]
+        },
+        'PD160': {
+            'vis_code': [1,1,0,0,0,1,0]
+        },
+        'PD180': {
+            'vis_code': [1,1,0,0,0,0,0]
+        },
+        'PD240': {
+            'vis_code': [1,1,0,0,0,0,1]
+        },
+        'PD290': {
+            'vis_code': [1,0,1,1,1,1,0]
+        }
+    }
+
+    def __init__(self, f, mode='PD50'):
+        pass
+
+
+class RobotEncoder(Encoder):
+    opts = {
+        '36': {
+            'vis_code': [0,0,0,1,0,0,0]
+        },
+        '72': {
+            'vis_code': [0,0,0,1,1,0,0]
+        }
+    }
+
+    def __init__(self, f, mode='36'):
+        pass
+
+
+class FAXEncoder(Encoder):
+    opts = {
+        'FAX480': {
+            't_pixel': 0.512,
+            'vis_code': [],
+            'width': 512,
+            'height': 480
+        }
+    }
+
+    def __init__(self, f, mode='FAX480'):
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f)
+        print(f'[.] Using FAXEncoder with mode {mode}')
+        self.sync_hz = 1200
+        self.sync_ms = 5.12
+        self.t1_hz = 1500
+        self.t1_ms = 0.5
+
+
+    #@override
+    def generate_header(self):
+        for _ in range(1220):
+            self.generate_tone(f_hz=2300, t_ms=2.05)
+            self.generate_tone(f_hz=1500, t_ms=2.05)
+
+
+    def generate_phasing_interval(self, w):
+        for _ in range(20):
+            self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+            for i in range(w):
+                self.generate_tone(f_hz=self.lum_w_hz, t_ms=self.enc['t_pixel'])
+
+
+    def encode_line(self, line, w):
+        self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+
+        for i in range(0, w):
+            # wacky RGB->monochrome conversion
+            mono = 0.3*line[i*3] + 0.59*line[i*3 + 1] + 0.11*line[i*3 + 2] 
+            f_l = (mono * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
+            self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
+
+
 
 ENCODERS = {
     'Martin': MartinEncoder,
-    'Scottie': ScottieEncoder
+    'Scottie': ScottieEncoder,
+    'Wrasse': WrasseEncoder,
+    'Pasokon': PasokonEncoder,
+    'FAX': FAXEncoder
 }
 
 
@@ -182,15 +366,19 @@ def encode(img_path, out_path, encoding, mode, sr=None):
     if sr:
         e.set_samp_rate(sr)
 
-    e.generate_header()
-    e.generate_VIS()
-
     img = Image.open(img_path).convert('RGB')
     img.thumbnail((e.enc['width'],e.enc['height']))
     w, h = img.size
 
     assert w <= e.enc['width']
     assert h <= e.enc['height']
+
+    e.generate_header()
+
+    if encoding != 'FAX':
+        e.generate_VIS()
+    else:
+        e.generate_phasing_interval(w)
 
     data = memoryview(img.tobytes())
     e.encode_image(data, h, w)
@@ -204,10 +392,21 @@ def decode(data, mode):
     pass
 
 
-if __name__ == '__main__':
-    assert len(sys.argv) > 3
+def print_help():
+    print('[!] Usage:\n\t./sstv.py ...')
+    print('\nAvailable encoders and modes:')
+    for key in ENCODERS.keys():
+        print(f'\t{key}: {", ".join(ENCODERS[key].opts.keys())}')
 
+    print('\nAvailable decoders and modes:')
+    print('\t...')
+
+
+if __name__ == '__main__':
     args = sys.argv[1:]
+    if len(args) < 2:
+        print_help()
+        sys.exit(1)
 
     func = None
     img_path = None
@@ -226,7 +425,8 @@ if __name__ == '__main__':
         elif arg == '--mode':
             mode = args[args.index(arg)+1]
         elif arg == '--sr':
-            sr = int(args[args.index(arg)+1])
+            sr = int(args[args.index(arg)+1])            
+
 
     if img_path and out_path and encoding and mode:
         if func == '--encode':
