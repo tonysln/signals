@@ -7,6 +7,7 @@ from encoder import *
 
 # http://lionel.cordesses.free.fr/gpages/Cordesses.pdf
 # https://web.archive.org/web/20241227121817/http://www.barberdsp.com/downloads/Dayton%20Paper.pdf
+# https://www.sstv-handbook.com/download/sstv-handbook.pdf
 
 
 ENCODERS = {

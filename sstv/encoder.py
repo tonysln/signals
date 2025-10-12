@@ -125,6 +125,18 @@ class MartinEncoder(Encoder):
             'vis': 40,
             'width': 320,
             'height': 256
+        },
+        'M3': {
+            't_pixel': 0.4576,
+            'vis': 36,
+            'width': 320,
+            'height': 128
+        },
+        'M4': {
+            't_pixel': 0.2288,
+            'vis': 32,
+            'width': 320,
+            'height': 128
         }
     }
 
@@ -166,6 +178,18 @@ class ScottieEncoder(Encoder):
             'vis': 56,
             'width': 320,
             'height': 256
+        },
+        'S3': {
+            't_pixel': 0.4320,
+            'vis': 52,
+            'width': 320,
+            'height': 128
+        },
+        'S4': {
+            't_pixel': 0.2752,
+            'vis': 48,
+            'width': 320,
+            'height': 128
         },
         'DX': {
             't_pixel': 1.0800,
@@ -210,8 +234,26 @@ class ScottieEncoder(Encoder):
 
 class WrasseEncoder(Encoder):
     opts = {
+        'SC2-30': {
+            't_pixel': 0.18125,
+            'vis': 51,
+            'width': 320,
+            'height': 128
+        },
+        'SC2-60': {
+            't_pixel': 0.18125,
+            'vis': 59,
+            'width': 320,
+            'height': 256
+        },
+        'SC2-120': {
+            't_pixel': 0.365625,
+            'vis': 63,
+            'width': 320,
+            'height': 256
+        },
         'SC2-180': {
-            't_pixel': 0.7344,
+            't_pixel': 0.734375,
             'vis': 55,
             'width': 320,
             'height': 256
@@ -467,7 +509,7 @@ class FAXEncoder(Encoder):
     opts = {
         'FAX480': {
             't_pixel': 0.512,
-            'vis': 0,
+            'vis': 85,
             'width': 512,
             'height': 480
         }
