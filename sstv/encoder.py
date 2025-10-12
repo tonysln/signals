@@ -8,25 +8,37 @@ from functools import lru_cache
 class Encoder():
     def __init__(self, f, wave=True, samp_rate=44100):
         self.phase = 0.0
+        self.clock = 0.0
+        self.last_sample = 0
         self.SR = samp_rate
         self.A = 32767
         self.file = f
         self.wav = wave
 
+        print(f'[.] Using sample rate {self.SR} Hz')
+
         self.lum_max = 255
         self.lum_w_hz = 2300
         self.lum_b_hz = 1500
-        self.mf = 1.0
+
+        self.intro_tone_hz = [1900,1500,1900,1500,2300,1500,2300,1500]
+        self.intro_tone_ms = 100
 
         if self.wav:
-            print('[+] Writing output as WAV')
+            print('[.] Writing output as WAV')
             self.file.setparams((1, 2, self.SR, 0, 'NONE', 'Uncompressed'))
         else:
             print('[!] Writing output as raw PCM samples')
 
 
     def generate_tone(self, f_hz, t_ms):
-        total_samples = int(self.SR * (t_ms / 1000.0 * self.mf))
+        t_s = t_ms / 1000.0
+        self.clock += t_s
+
+        # Closest sample we should use without cutting
+        end_sample = round(self.clock * self.SR)
+
+        total_samples = end_sample - self.last_sample
         phase_inc = 2 * math.pi * f_hz / self.SR
 
         b = array.array('h', [0]*total_samples)
@@ -42,29 +54,39 @@ class Encoder():
         else:
             self.file.writeframes(b.tobytes())
 
-        return i
+        self.last_sample = end_sample
 
 
     def encode_image(self, data):
+        print('[.] Encoding image data...')
         for y in range(self.enc['height']):
             w = self.enc['width']
             self.encode_line(data[y*w*3 : (y+1)*w*3])
 
 
+    def generate_intro(self):
+        print('[+] Generating VOX intro code...')
+        for hz in self.intro_tone_hz:
+            self.generate_tone(f_hz=hz, t_ms=self.intro_tone_ms)
+
+
     def generate_header(self):
+        print('[.] Generating header...')
         self.generate_tone(f_hz=1900, t_ms=300)
         self.generate_tone(f_hz=1200, t_ms=10)
         self.generate_tone(f_hz=1900, t_ms=300)
 
 
     def generate_VIS(self):
+        print('[.] Generating VIS code...')
         self.generate_tone(f_hz=1200, t_ms=30) # start bit
 
-        for bit in self.enc['vis_code'][::-1]: # LSB, 7 data
+        vis_bits = self.dec_to_bin_lsb(self.enc['vis'])
+        for bit in vis_bits: # LSB, 7 data
             hz = 1100 if bit else 1300
             self.generate_tone(f_hz=hz, t_ms=30)
         
-        even_parity = sum(self.enc['vis_code']) % 2 == 0
+        even_parity = sum(vis_bits) % 2 == 0
         hz = 1300 if even_parity else 1100
         self.generate_tone(f_hz=hz, t_ms=30) # parity bit
         self.generate_tone(f_hz=1200, t_ms=30) # stop bit
@@ -82,6 +104,9 @@ class Encoder():
     def rgb_to_by(self, R, G, B):
         return 128.0 + (0.003906 * ((-37.945 * R) + (-74.494 * G) + (112.439 * B)))
 
+    def dec_to_bin_lsb(self, val, n=7):
+        return [(val >> i) & 1 for i in range(n)]
+
 
     def __del__(self):
         self.file.close()
@@ -91,13 +116,13 @@ class MartinEncoder(Encoder):
     opts = {
         'M1': {
             't_pixel': 0.4576,
-            'vis_code': [0,1,0,1,1,0,0],
+            'vis': 44,
             'width': 320,
             'height': 256
         },
         'M2': {
             't_pixel': 0.2288,
-            'vis_code': [0,1,0,1,0,0,0],
+            'vis': 40,
             'width': 320,
             'height': 256
         }
@@ -132,19 +157,19 @@ class ScottieEncoder(Encoder):
     opts = {
         'S1': {
             't_pixel': 0.4320,
-            'vis_code': [0,1,1,1,1,0,0],
+            'vis': 60,
             'width': 320,
             'height': 256
         },
         'S2': {
             't_pixel': 0.2752,
-            'vis_code': [0,1,1,1,0,0,0],
+            'vis': 56,
             'width': 320,
             'height': 256
         },
         'DX': {
             't_pixel': 1.0800,
-            'vis_code': [1,0,0,1,1,0,0],
+            'vis': 76,
             'width': 320,
             'height': 256
         }
@@ -187,7 +212,7 @@ class WrasseEncoder(Encoder):
     opts = {
         'SC2-180': {
             't_pixel': 0.7344,
-            'vis_code': [0,1,1,0,1,1,1],
+            'vis': 55,
             'width': 320,
             'height': 256
         }
@@ -220,7 +245,7 @@ class PasokonEncoder(Encoder):
     opts = {
         'P3': {
             't_pixel': 0.2083,
-            'vis_code': [1,1,1,0,0,0,1],
+            'vis': 113,
             'width': 640,
             'height': 496,
             'sync_hz': 1200,
@@ -230,7 +255,7 @@ class PasokonEncoder(Encoder):
         },
         'P5': {
             't_pixel': 0.3125,
-            'vis_code': [1,1,1,0,0,1,0],
+            'vis': 114,
             'width': 640,
             'height': 496,
             'sync_hz': 1200,
@@ -240,7 +265,7 @@ class PasokonEncoder(Encoder):
         },
         'P7': {
             't_pixel': 0.4167,
-            'vis_code': [1,1,1,0,0,1,1],
+            'vis': 115,
             'width': 640,
             'height': 496,
             'sync_hz': 1200,
@@ -274,43 +299,43 @@ class PasokonEncoder(Encoder):
 class PDEncoder(Encoder):
     opts = {
         'PD50': {
-            'vis_code': [1,0,1,1,1,0,1],
+            'vis': 93,
             'width': 320,
             'height': 256,
             'y_scan_ms': 0.286,
         },
         'PD90': {
-            'vis_code': [1,1,0,0,0,1,1],
+            'vis': 99,
             'width': 320,
             'height': 256,
             'y_scan_ms': 0.532,
         },
         'PD120': {
-            'vis_code': [1,0,1,1,1,1,1],
+            'vis': 95,
             'width': 640,
             'height': 496,
             'y_scan_ms': 0.19,
         },
         'PD160': {
-            'vis_code': [1,1,0,0,0,1,0],
+            'vis': 98,
             'width': 512,
             'height': 400,
             'y_scan_ms': 0.382,
         },
         'PD180': {
-            'vis_code': [1,1,0,0,0,0,0],
+            'vis': 96,
             'width': 640,
             'height': 496,
             'y_scan_ms': 0.286,
         },
         'PD240': {
-            'vis_code': [1,1,0,0,0,0,1],
+            'vis': 97,
             'width': 640,
             'height': 496,
             'y_scan_ms': 0.382,
         },
         'PD290': {
-            'vis_code': [1,0,1,1,1,1,0],
+            'vis': 94,
             'width': 800,
             'height': 616,
             'y_scan_ms': 0.286,
@@ -360,7 +385,7 @@ class PDEncoder(Encoder):
 class RobotEncoder(Encoder):
     opts = {
         '36': {
-            'vis_code': [0,0,0,1,0,0,0],
+            'vis': 8,
             'width': 320,
             'height': 240,
             'esep_hz': 1500,
@@ -369,7 +394,7 @@ class RobotEncoder(Encoder):
             'by_scan_ms': 0.1375
         },
         '72': {
-            'vis_code': [0,0,0,1,1,0,0],
+            'vis': 12,
             'width': 320,
             'height': 240,
             'y_scan_ms': 0.43125,
@@ -442,7 +467,7 @@ class FAXEncoder(Encoder):
     opts = {
         'FAX480': {
             't_pixel': 0.512,
-            'vis_code': [],
+            'vis': 0,
             'width': 512,
             'height': 480
         }

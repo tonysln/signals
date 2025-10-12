@@ -20,7 +20,7 @@ ENCODERS = {
 }
 
 
-def encode(img_path, out_path, encoding, mode, sr=44100, wav=True):
+def encode(img_path, out_path, encoding, mode, intro_tone, sr=44100, wav=True):
     assert encoding in ENCODERS
 
     if wav:
@@ -39,6 +39,9 @@ def encode(img_path, out_path, encoding, mode, sr=44100, wav=True):
     w,h = e.enc['width'], e.enc['height']
     img = img.resize((w, h), Image.LANCZOS) # TODO handle
     # img.save('output.png')
+
+    if intro_tone:
+        e.generate_intro()
 
     e.generate_header()
 
@@ -82,6 +85,7 @@ if __name__ == '__main__':
     mode = None
     sr = 44100
     wav = True
+    intro = False
     for arg in args:
         if arg in ['--encode', '--decode']:
             func = arg
@@ -96,12 +100,14 @@ if __name__ == '__main__':
             sr = int(args[args.index(arg)+1])
         elif arg == '--raw':
             wav = False
+        elif arg == '--vox':
+            intro = True
 
 
     if img_path and out_path and encoding and mode:
         if func == '--encode':
-            print(f'[.] Encoding {img_path}...')
-            encode(img_path, out_path, encoding, mode, sr, wav)
+            print(f'[+] Encoding {img_path}...')
+            encode(img_path, out_path, encoding, mode, intro, sr, wav)
             print(f'[+] Wrote output to {out_path}')
 
     print('Done.')
