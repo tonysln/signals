@@ -134,7 +134,7 @@ class MartinEncoder(Encoder):
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
         print(f'[.] Using MartinEncoder with mode {mode}')
-        self.sync_hz = 1300
+        self.sync_hz = 1200
         self.sync_ms = 4.862
         self.t1_hz = 1500
         self.t1_ms = 0.572
