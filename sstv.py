@@ -78,6 +78,19 @@ class Encoder():
         self.generate_tone(f_hz=1200, t_ms=30) # stop bit
 
 
+    @lru_cache(maxsize=4096)
+    def rgb_to_y(self, R, G, B):
+        return 16.0 + (0.003906 * ((65.738 * R) + (129.057 * G) + (25.064 * B)))
+
+    @lru_cache(maxsize=4096)
+    def rgb_to_ry(self, R, G, B):
+        return 128.0 + (0.003906 * ((112.439 * R) + (-94.154 * G) + (-18.285 * B)))
+
+    @lru_cache(maxsize=4096)
+    def rgb_to_by(self, R, G, B):
+        return 128.0 + (0.003906 * ((-37.945 * R) + (-74.494 * G) + (112.439 * B)))
+
+
     def __del__(self):
         self.file.close()
 
@@ -269,30 +282,85 @@ class PasokonEncoder(Encoder):
 class PDEncoder(Encoder):
     opts = {
         'PD50': {
-            'vis_code': [1,0,1,1,1,0,1]
+            'vis_code': [1,0,1,1,1,0,1],
+            'width': 320,
+            'height': 256,
+            'y_scan_ms': 0.286,
         },
         'PD90': {
-            'vis_code': [1,1,0,0,0,1,1]
+            'vis_code': [1,1,0,0,0,1,1],
+            'width': 320,
+            'height': 256,
+            'y_scan_ms': 0.532,
         },
         'PD120': {
-            'vis_code': [1,0,1,1,1,1,1]
+            'vis_code': [1,0,1,1,1,1,1],
+            'width': 640,
+            'height': 496,
+            'y_scan_ms': 0.19,
         },
         'PD160': {
-            'vis_code': [1,1,0,0,0,1,0]
+            'vis_code': [1,1,0,0,0,1,0],
+            'width': 512,
+            'height': 400,
+            'y_scan_ms': 0.382,
         },
         'PD180': {
-            'vis_code': [1,1,0,0,0,0,0]
+            'vis_code': [1,1,0,0,0,0,0],
+            'width': 640,
+            'height': 496,
+            'y_scan_ms': 0.286,
         },
         'PD240': {
-            'vis_code': [1,1,0,0,0,0,1]
+            'vis_code': [1,1,0,0,0,0,1],
+            'width': 640,
+            'height': 496,
+            'y_scan_ms': 0.382,
         },
         'PD290': {
-            'vis_code': [1,0,1,1,1,1,0]
+            'vis_code': [1,0,1,1,1,1,0],
+            'width': 800,
+            'height': 616,
+            'y_scan_ms': 0.286,
         }
     }
 
-    def __init__(self, f, mode='PD50', sr=44100):
-        pass
+    def __init__(self, f, wav, mode='PD50', sr=44100):
+        assert mode in self.opts
+        self.mode = mode
+        self.enc = self.opts[self.mode]
+        super().__init__(f, wav, sr)
+        print(f'[.] Using PDEncoder with mode {mode}')
+        self.sync_hz = 1200
+        self.sync_ms = 20
+        self.t1_hz = 1500
+        self.t1_ms = 2.080
+        self.odd_line = False
+
+
+    def encode_line(self, line, w):
+        if self.odd_line:
+            self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
+            self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
+
+            for i in range(0, w):
+                y = self.rgb_to_y(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                self.generate_tone(f_hz=self.lum_b_hz+y, t_ms=self.enc['y_scan_ms'])
+
+            for i in range(0, w):
+                r_y = self.rgb_to_ry(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                self.generate_tone(f_hz=self.lum_b_hz+r_y, t_ms=self.enc['y_scan_ms'])
+
+            for i in range(0, w):
+                b_y = self.rgb_to_by(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                self.generate_tone(f_hz=self.lum_b_hz+b_y, t_ms=self.enc['y_scan_ms'])
+
+        else:
+            for i in range(0, w):
+                y = self.rgb_to_y(line[i*3], line[i*3+1], line[i*3+2]) * 3.1372549
+                self.generate_tone(f_hz=self.lum_b_hz+y, t_ms=self.enc['y_scan_ms'])
+
+        self.odd_line = not self.odd_line
 
 
 class RobotEncoder(Encoder):
@@ -335,19 +403,6 @@ class RobotEncoder(Encoder):
         self.osep_hz = 2300
         self.osep_ms = 4.5
         self.odd_line = False
-
-
-    @lru_cache
-    def rgb_to_y(self, R, G, B):
-        return 16.0 + (0.003906 * ((65.738 * R) + (129.057 * G) + (25.064 * B)))
-
-    @lru_cache
-    def rgb_to_ry(self, R, G, B):
-        return 128.0 + (0.003906 * ((112.439 * R) + (-94.154 * G) + (-18.285 * B)))
-
-    @lru_cache
-    def rgb_to_by(self, R, G, B):
-        return 128.0 + (0.003906 * ((-37.945 * R) + (-74.494 * G) + (112.439 * B)))
 
 
     def encode_line(self, line, w):
@@ -448,7 +503,8 @@ ENCODERS = {
     'Wrasse': WrasseEncoder,
     'Pasokon': PasokonEncoder,
     'FAX': FAXEncoder,
-    'Robot': RobotEncoder
+    'Robot': RobotEncoder,
+    'PD': PDEncoder
 }
 
 
@@ -467,15 +523,17 @@ def encode(img_path, out_path, encoding, mode, sr=44100, wav=True):
         sys.exit(1)
 
     img = Image.open(img_path).convert('RGB')
-    img.thumbnail((e.enc['width'],e.enc['height']))
-    w, h = img.size
-    ew,eh = e.enc['width'], e.enc['height']
+
+    w,h = e.enc['width'], e.enc['height']
+    img = img.resize((w, h), Image.LANCZOS) # TODO handle
+
+    # img.save('output.png')
 
     # Fill image if smaller
-    if (w,h) != (ew,eh):
-        new = Image.new('RGB', (ew,eh), (255, 255, 255))
-        new.paste(img, ((ew - w) // 2, (eh - h) // 2))
-        img = new
+    # if (w,h) != (ew,eh):
+    #     new = Image.new('RGB', (ew,eh), (255, 255, 255))
+    #     new.paste(img, ((ew - w) // 2, (eh - h) // 2))
+    #     img = new
 
     e.generate_header()
 
