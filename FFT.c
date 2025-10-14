@@ -16,29 +16,41 @@
 
 void fft(double *real, double *imag, int n) {
     int i, j, k, m;
+
     for (i = 1, j = 0; i < n; i++) {
         int bit = n >> 1;
-        for (; j & bit; bit >>= 1) j ^= bit;
+
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+
         j ^= bit;
+
         if (i < j) {
-            double tr = real[i]; real[i] = real[j]; real[j] = tr;
-            double ti = imag[i]; imag[i] = imag[j]; imag[j] = ti;
+            double tr = real[i];
+            real[i] = real[j];
+            real[j] = tr;
+            double ti = imag[i];
+            imag[i] = imag[j];
+            imag[j] = ti;
         }
     }
     for (int len = 2; len <= n; len <<= 1) {
         double ang = -2 * M_PI / len;
         double wlen_r = cos(ang);
         double wlen_i = sin(ang);
+
         for (i = 0; i < n; i += len) {
             double wr = 1, wi = 0;
             for (j = 0; j < len / 2; j++) {
                 double ur = real[i + j], ui = imag[i + j];
                 double vr = real[i + j + len/2] * wr - imag[i + j + len/2] * wi;
                 double vi = real[i + j + len/2] * wi + imag[i + j + len/2] * wr;
+
                 real[i + j] = ur + vr;
                 imag[i + j] = ui + vi;
                 real[i + j + len/2] = ur - vr;
                 imag[i + j + len/2] = ui - vi;
+
                 double nxt_wr = wr * wlen_r - wi * wlen_i;
                 wi = wr * wlen_i + wi * wlen_r;
                 wr = nxt_wr;
@@ -84,5 +96,12 @@ void hann(double *val, int n) {
 void filter(double *val, double* fval, int n) {
     for (int i = 0; i < n; i++) {
         val[i] = fval[i] * val[i];
+    }
+}
+
+void mag_power(double *val, double *mag, double *pwr, int n) {
+    for (int i = 0; i < n; i++) {
+        mag[i] = abs(val[i]);
+        pwr[i] = mag[i]*mag[i];
     }
 }

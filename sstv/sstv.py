@@ -4,6 +4,7 @@ from PIL import Image
 import sys
 import wave
 from encoder import *
+from decoder import *
 
 # http://lionel.cordesses.free.fr/gpages/Cordesses.pdf
 # https://web.archive.org/web/20241227121817/http://www.barberdsp.com/downloads/Dayton%20Paper.pdf
@@ -21,7 +22,7 @@ ENCODERS = {
 }
 
 DECODERS = {
-    
+    'General': Decoder
 }
 
 
@@ -68,6 +69,22 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
 def decode(in_path, out_path, iformat, sr, wave, encoding, mode):
     print(f'[.] Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode}')
     print(f'[.] Using output parameters: format={iformat}')
+
+    f = open(out_path, 'wb')
+    try:
+        e = DECODERS['General'](f, iformat, encoding, mode, sr)
+    except AssertionError:
+        print(f'[!] Unknown encoder or mode provided!')
+        sys.exit(1)
+
+    if wave:
+        e.read_wav(in_path)
+        e.process_wav_samples()
+
+    e.__del__()
+    if not f.closed:
+        f.close()
+
     return False
 
 
