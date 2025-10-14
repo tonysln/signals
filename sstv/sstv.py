@@ -20,8 +20,12 @@ ENCODERS = {
     'PD': PDEncoder
 }
 
+DECODERS = {
+    
+}
 
-def encode(img_path, out_path, encoding, mode, intro_tone, sr=44100, wav=True):
+
+def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     assert encoding in ENCODERS
 
     if wav:
@@ -58,16 +62,23 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr=44100, wav=True):
     if not wav and not f.closed:
         f.close()
 
+    return True
 
-def decode(data, mode):
-    pass
+
+def decode(in_path, out_path, iformat, sr, wave, encoding, mode):
+    print(f'[.] Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode}')
+    print(f'[.] Using output parameters: format={iformat}')
+    return False
 
 
 def print_help():
     print('[!] Usage:\n\t./sstv.py ...')
     print('\nAvailable encoders and modes:')
     for key in ENCODERS.keys():
-        print(f'\t{key}: {", ".join(ENCODERS[key].opts.keys())}')
+        print(f'{" "*4}{key}:')
+        for mode in ENCODERS[key].opts.keys():
+            mm = ENCODERS[key].opts[mode]
+            print(f'{" "*8}{mode} {mm["width"]}x{mm["height"]}')
 
     print('\nAvailable decoders and modes:')
     print('\t...')
@@ -80,9 +91,10 @@ if __name__ == '__main__':
         sys.exit(1)
 
     func = None
-    img_path = None
+    in_path = None
     out_path = None
     encoding = None
+    iformat = 'PNG'
     mode = None
     sr = 44100
     wav = True
@@ -90,11 +102,13 @@ if __name__ == '__main__':
     for arg in args:
         if arg in ['--encode', '--decode']:
             func = arg
-            img_path = args[args.index(arg)+1]
+            in_path = args[args.index(arg)+1]
         elif arg == '--out':
             out_path = args[args.index(arg)+1]
         elif arg == '--encoding':
             encoding = args[args.index(arg)+1]
+        elif arg == '--format':
+            iformat = args[args.index(arg)+1]
         elif arg == '--mode':
             mode = args[args.index(arg)+1]
         elif arg == '--sr':
@@ -105,12 +119,15 @@ if __name__ == '__main__':
             intro = True
 
 
-    if img_path and out_path and encoding and mode:
-        if func == '--encode':
-            print(f'[+] Encoding {img_path}...')
-            encode(img_path, out_path, encoding, mode, intro, sr, wav)
-            print(f'[+] Wrote output to {out_path}')
+    if in_path and out_path:
+        if func == '--encode' and encoding and mode:
+            print(f'[+] Encoding {in_path}...')
+            if encode(in_path, out_path, encoding, mode, intro, sr, wav):
+                print(f'[+] Wrote output to {out_path}')
+
+        elif func == '--decode':
+            print(f'[+] Decoding {in_path}...')
+            if decode(in_path, out_path, iformat, sr, wav, encoding, mode):
+                print(f'[+] Wrote output to {out_path}')
 
     print('Done.')
-
-# ffmpeg -f s16le -ar 22050 -ac 1 -i test.pcm -f alsa default 

@@ -17,7 +17,6 @@ class Encoder():
 
         print(f'[.] Using sample rate {self.SR} Hz')
 
-        self.lum_max = 255
         self.lum_w_hz = 2300
         self.lum_b_hz = 1500
 
@@ -158,7 +157,6 @@ class MartinEncoder(Encoder):
 
         for j in [1, 2, 0]: # GBR
             for i in range(0, self.enc['width']):
-                # f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
                 f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
@@ -221,7 +219,6 @@ class ScottieEncoder(Encoder):
 
         for j in [1, 2, 0]: # GBR
             for i in range(0, self.enc['width']):
-                # f_l = (line[i*3 + j] * (self.lum_w_hz- self.lum_b_hz)) / self.lum_max
                 f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
@@ -278,7 +275,6 @@ class WrasseEncoder(Encoder):
 
         for j in [0, 1, 2]: # RGB
             for i in range(0, self.enc['width']):
-                # f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
                 f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
@@ -331,7 +327,6 @@ class PasokonEncoder(Encoder):
 
         for j in [0, 1, 2]: # RGB
             for i in range(0, self.enc['width']):
-                # f_l = (line[i*3 + j] * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
                 f_l = line[i*3 + j] * 3.1372549
                 self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
 
@@ -547,6 +542,5 @@ class FAXEncoder(Encoder):
         for i in range(0, self.enc['width']):
             # wacky RGB->monochrome conversion
             mono = 0.3*line[i*3] + 0.59*line[i*3 + 1] + 0.11*line[i*3 + 2] 
-            # f_l = (mono * (self.lum_w_hz - self.lum_b_hz)) / self.lum_max
             f_l = mono * 3.1372549
             self.generate_tone(f_hz=self.lum_b_hz+f_l, t_ms=self.enc['t_pixel'])
