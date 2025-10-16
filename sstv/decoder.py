@@ -27,8 +27,8 @@ class Decoder():
         lib.hann.restype = None
         lib.filter.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
         lib.filter.restype = None
-        lib.mag_power.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
-        lib.mag_power.restype = None
+        lib.fft_mag_pwr.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.fft_mag_pwr.restype = ctypes.c_double
         self.lib = lib
 
 
@@ -54,8 +54,10 @@ class Decoder():
             # print(f'final i={i}/{flen}')
 
 
-    def process_wav_samples(self, N=1024, hop=256):
+    def process_wav_samples(self, N=1024, hop=512):
         print('[.] Processing WAV samples...')
+
+        fbins = [j * self.sr / N for j in range(0, N//2)]
 
         DoubleArray = ctypes.c_double * N
         hann = DoubleArray(*[0.0]*N)
@@ -70,16 +72,21 @@ class Decoder():
             while len(slce) < N:
                 slce.append(0.0)
 
-            vals = DoubleArray(*slce)
-            self.lib.filter(vals, hann, N)
-            self.lib.dct(vals, N)
+            real = DoubleArray(*slce)
+            imag = DoubleArray(*[0.0]*N) # TODO use the double realFFT
+
+            self.lib.filter(real, hann, N)
+            self.lib.fft(real, imag, N)
 
             mag = DoubleArray(*[0.0]*N)
-            power = DoubleArray(*[0.0]*N)
-            self.lib.mag_power(vals, mag, power, N)
+            pwr = self.lib.fft_mag_pwr(real, imag, mag, N)
+
+            # TODO parabolic interp to get exact freqs
+            for j,freq in enumerate(fbins):
+                pass
 
             # print(f'win={n}, i={i}/{slen}')
-            i += n
+            i += min(hop, slen-i)
 
         # print(f'final i={i}/{slen}')
 

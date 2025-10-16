@@ -12,6 +12,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <float.h>
 
 
 void fft(double *real, double *imag, int n) {
@@ -99,9 +100,12 @@ void filter(double *val, double* fval, int n) {
     }
 }
 
-void mag_power(double *val, double *mag, double *pwr, int n) {
+double fft_mag_pwr(double *real, double *imag, double *mag, int n) {
+    double pwr = DBL_EPSILON;
     for (int i = 0; i < n; i++) {
-        mag[i] = abs(val[i]);
-        pwr[i] = mag[i]*mag[i];
+        mag[i] = real[i]*real[i] + imag[i]*imag[i];
+        pwr += mag[i];
     }
+    pwr = pwr / n;
+    return sqrt(pwr);
 }
