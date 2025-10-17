@@ -29,6 +29,8 @@ class Decoder():
         lib.filter.restype = None
         lib.fft_mag_pwr.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
         lib.fft_mag_pwr.restype = ctypes.c_double
+        lib.mag_log.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.mag_log.restype = None
         self.lib = lib
 
 
@@ -65,6 +67,7 @@ class Decoder():
 
         slen = len(self.wav_samples)
         i = 0
+        fmax = []
         while i < slen:
             n = min(N, slen-i)
 
@@ -81,15 +84,44 @@ class Decoder():
             mag = DoubleArray(*[0.0]*N)
             pwr = self.lib.fft_mag_pwr(real, imag, mag, N)
 
-            # TODO parabolic interp to get exact freqs
-            for j,freq in enumerate(fbins):
-                pass
+            self.lib.mag_log(mag, N)
+
+            # Select peak in current window
+            b = [None, 1e-10, None]
+            for j,m in enumerate(mag):
+                if m > b[1]:
+                    b = fbins[j],m,j
+
+            nf,c = self.interpolate_mag(mag, b[2], N)
+            fmax.append((i*1000/self.sr,nf))
 
             # print(f'win={n}, i={i}/{slen}')
             i += min(hop, slen-i)
 
-        # print(f'final i={i}/{slen}')
+        print(f'final i={i}/{slen}')
+        print(len(fmax),fmax[:20])
 
+
+    def interpolate_mag(self, mags, ind, N):
+        # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+        
+        nf = ind * self.sr / N
+        c = mags[ind]
+
+        if not (ind-1 > 0 and ind+1 < len(mags)):
+            return nf,c
+        
+        p = mags[ind-1]
+        n = mags[ind+1]
+
+        # Consider only if local peak
+        if c > p and c > n:
+            d = 0.5*(p - n) / (p - 2*c + n)
+            nf = (ind + d) * (self.sr / N)
+            return nf,c - 0.25*(p - n) * d
+
+        return nf,c
+ 
 
     def __del__(self):
         self.file.close()

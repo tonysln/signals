@@ -109,3 +109,9 @@ double fft_mag_pwr(double *real, double *imag, double *mag, int n) {
     pwr = pwr / n;
     return sqrt(pwr);
 }
+
+void mag_log(double *mag, int n) {
+    for (int i = 0; i < n; i++) {
+        mag[i] = log(100*mag[i] + 1.0);
+    }
+}
