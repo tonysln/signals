@@ -10,7 +10,7 @@ class Decoder():
         self.sr = samp_rate
         self.encoding = encoding
         self.mode = mode
-        self.wav_samples = []
+        self.pcm_samples = []
 
         self.load_libfft()
 
@@ -36,7 +36,7 @@ class Decoder():
 
     def read_wav(self, in_path, chunk_size=4096):
         print('[.] Reading WAV samples...')
-        self.wav_samples = []
+        self.pcm_samples = []
 
         with wave.open(in_path, 'r') as f:
             sr_ = int(f.getframerate())
@@ -48,7 +48,7 @@ class Decoder():
             while i < flen:
                 n = min(chunk_size, flen-i)
                 raw = f.readframes(n)
-                self.wav_samples.extend(struct.unpack("<" + "h"*n, raw))
+                self.pcm_samples.extend(struct.unpack("<" + "h"*n, raw))
 
                 # print(f'read={n}, i={i}/{flen-i}')
                 i += n
@@ -56,8 +56,8 @@ class Decoder():
             # print(f'final i={i}/{flen}')
 
 
-    def process_wav_samples(self, N=1024, hop=512):
-        print('[.] Processing WAV samples...')
+    def process_pcm_samples(self, N=1024, hop=512):
+        print('[.] Processing PCM stream...')
 
         fbins = [j * self.sr / N for j in range(0, N//2)]
 
@@ -65,13 +65,13 @@ class Decoder():
         hann = DoubleArray(*[0.0]*N)
         self.lib.hann(hann, N)
 
-        slen = len(self.wav_samples)
+        slen = len(self.pcm_samples)
         i = 0
         fmax = []
         while i < slen:
             n = min(N, slen-i)
 
-            slce = self.wav_samples[i:i+n]
+            slce = self.pcm_samples[i:i+n]
             while len(slce) < N:
                 slce.append(0.0)
 
@@ -98,13 +98,14 @@ class Decoder():
             # print(f'win={n}, i={i}/{slen}')
             i += min(hop, slen-i)
 
-        print(f'final i={i}/{slen}')
-        print(len(fmax),fmax[:20])
+        # print(f'final i={i}/{slen}')
+
+        return fmax
 
 
     def interpolate_mag(self, mags, ind, N):
         # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-        
+
         nf = ind * self.sr / N
         c = mags[ind]
 
@@ -121,6 +122,83 @@ class Decoder():
             return nf,c - 0.25*(p - n) * d
 
         return nf,c
+
+
+    def parse_samples(self, fft_res):
+        recording = []
+        cur_t = 0.0
+        start_t = 0.0
+        prev_f = None
+        for i,(ms,ff) in enumerate(fft_res):
+            # print(ms, f)
+            ff = int(round(ff, -2)) if i < 21 else ff
+            cur_t += ms - start_t
+
+            if ff == prev_f:
+                pass
+            elif i > 0:
+                recording += [(prev_f,round(cur_t / 5.0, -1))]
+                cur_t = 0.0
+                start_t = ms
+
+            prev_f = ff
+
+        return recording
+
+
+    def decode_header(self):
+        pass
+
+
+    def decode_VIS(self):
+        pass
+
+
+    def decode_phasing_interval(self):
+        pass
+
+
+    def decode_image(self, template, recording):
+        i = 0
+        j = 0
+        vis = ''
+        parity = None
+        state = -2
+        lines = []
+        gbr = [[], [], []]
+        while i < len(template) and j < len(recording):
+            t_f,t_ms = template[i]
+            r_f,r_ms = recording[j]
+
+            if abs(t_ms-r_ms) < 21:
+                if i > 11 and i < 19:
+                    vis = ('1' if r_f == 1100 else '0') + vis
+                elif i == 19:
+                    parity = r_f == 1300
+                elif i == 20:
+                    print('VIS:', vis, int(vis, 2))
+                    print('parity:', parity, (vis.count('1')%2 == 0) == parity)
+                elif i > 21:
+                    if t_f == 1200 or t_f == 1500:
+                        state += 1
+
+                    if state > 2:
+                        state = -2
+                        lines.append(gbr)
+                        gbr = [[], [], []]
+                    else:
+                        color = (r_f-1500)/3.1372549
+                        if state == 0:
+                            color *= 256
+                        elif state == 1:
+                            color *= 65536
+
+                        gbr[state].append(int(color))
+
+            i += 1
+            j += 1
+
+        return lines
  
 
     def __del__(self):

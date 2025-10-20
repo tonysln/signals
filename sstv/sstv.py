@@ -66,9 +66,11 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     return True
 
 
-def decode(in_path, out_path, iformat, sr, wave, encoding, mode):
-    print(f'[.] Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode}')
+def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
+    print(f'[.] Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}')
     print(f'[.] Using output parameters: format={iformat}')
+
+    assert iformat.upper() in ['TIFF', 'TIF', 'BMP', 'PNG']
 
     f = open(out_path, 'wb')
     try:
@@ -79,10 +81,56 @@ def decode(in_path, out_path, iformat, sr, wave, encoding, mode):
 
     if wave:
         e.read_wav(in_path)
-        e.process_wav_samples()
+    
+    fft_res = e.process_pcm_samples()
+
+    # Create template sequence
+    # NB! TODO count number of raw samples
+    
+    template = []
+    if intro:
+        template += [(1900,100),(1500,100),(1900,100),(1500,100),(2300,100),(1500,100),(2300,100),(1500,100)]
+
+    if encoding != 'FAX':
+        # Normal header
+        template += [(1900,300), (1200,10), (1900,300)]
+        # VIS
+        template += [(1200, 30)]
+        template += [(None, 30)]*8
+        template += [(1200, 30)]
+        # Parse VIS and verify encoding mode, check parity bit
+        # Set up sync pulse timings to follow
+    else:
+        # FAX header
+        template += [(2300,2.05), (1500,2.05)]*1220
+        # phasing interval
+        template += []
+
+    # Martin M1
+    for y in range(256):
+        template += [(1200,4.862)]
+        template += [(1500,0.572)]
+        for j in range(3):
+            for x in range(320):
+                template += [(None,0.4576)]
+
+            template += [(1500,0.572)]
+
+
+    # Process samples and match
+    recording = e.parse_samples(fft_res)
+
+    e.decode_header()
+
+    if encoding != 'FAX':
+        e.decode_VIS()
+    else:
+        e.decode_phasing_interval()
+
+    lines = e.decode_image(template, recording)
 
     e.__del__()
-    if not f.closed:
+    if not wave and not f.closed:
         f.close()
 
     return False
@@ -144,7 +192,7 @@ if __name__ == '__main__':
 
         elif func == '--decode':
             print(f'[+] Decoding {in_path}...')
-            if decode(in_path, out_path, iformat, sr, wav, encoding, mode):
+            if decode(in_path, out_path, iformat, sr, wav, encoding, mode, intro):
                 print(f'[+] Wrote output to {out_path}')
 
     print('Done.')
