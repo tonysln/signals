@@ -2,9 +2,39 @@ import ctypes
 import wave
 import struct
 import math
+from encoder import *
 
 
 class Decoder():
+    modes = {
+        44: (MartinEncoder, 'M1'),
+        40: (MartinEncoder, 'M2'),
+        36: (MartinEncoder, 'M3'),
+        32: (MartinEncoder, 'M4'),
+        60: (ScottieEncoder, 'S1'),
+        56: (ScottieEncoder, 'S2'),
+        52: (ScottieEncoder, 'S3'),
+        48: (ScottieEncoder, 'S4'),
+        76: (ScottieEncoder, 'DX'),
+        51: (WrasseEncoder, 'SC2-30'),
+        59: (WrasseEncoder, 'SC2-60'),
+        63: (WrasseEncoder, 'SC2-120'),
+        55: (WrasseEncoder, 'SC2-180'),
+        113: (PasokonEncoder, 'P3'),
+        114: (PasokonEncoder, 'P5'),
+        115: (PasokonEncoder, 'P7'),
+        93: (PDEncoder, 'PD50'),
+        99: (PDEncoder, 'PD90'),
+        95: (PDEncoder, 'PD120'),
+        98: (PDEncoder, 'PD160'),
+        96: (PDEncoder, 'PD180'),
+        97: (PDEncoder, 'PD240'),
+        94: (PDEncoder, 'PD290'),
+        8: (RobotEncoder, '36'),
+        12: (RobotEncoder, '72'),
+        85: (FAXEncoder, 'FAX480')
+    }
+
     def __init__(self, f, iformat, encoding, mode, samp_rate=44100):
         self.file = f
         self.sr = samp_rate
@@ -54,6 +84,17 @@ class Decoder():
                 i += n
 
             # print(f'final i={i}/{flen}')
+    
+
+    def find_window_peak(self, fbins, win, N):
+        # Select peak in current window
+        b = [None, 1e-10, None]
+        for j,m in enumerate(win):
+            if m > b[1]:
+                b = fbins[j],m,j
+
+        nf,c = self.interpolate_mag(win, b[2], N)
+        return nf,c
 
 
     def process_pcm_samples(self, N=1024, hop=512):
@@ -66,6 +107,11 @@ class Decoder():
         self.lib.hann(hann, N)
 
         slen = len(self.pcm_samples)
+
+        # TODO:
+        # template idea but based on estimated number of samples for each section
+
+
         i = 0
         fmax = []
         while i < slen:
@@ -85,14 +131,7 @@ class Decoder():
             pwr = self.lib.fft_mag_pwr(real, imag, mag, N)
 
             self.lib.mag_log(mag, N)
-
-            # Select peak in current window
-            b = [None, 1e-10, None]
-            for j,m in enumerate(mag):
-                if m > b[1]:
-                    b = fbins[j],m,j
-
-            nf,c = self.interpolate_mag(mag, b[2], N)
+            nf,c = self.find_window_peak(fbins, mag, N)
             fmax.append((i*1000/self.sr,nf))
 
             # print(f'win={n}, i={i}/{slen}')
@@ -146,16 +185,28 @@ class Decoder():
         return recording
 
 
-    def decode_header(self):
+    def decode_header(self, has_vox):
         pass
 
 
-    def decode_VIS(self):
-        pass
+    def decode_VIS(self, vis_raw):
+        vis = 0
+        for v in vis_raw[::-1]:
+            pass
+        
+        parity = sum(vis_raw) % 2 == 0
+
+        assert vis in self.modes
+
+        return self.modes[vis]
 
 
     def decode_phasing_interval(self):
         pass
+
+
+    def hz_to_rgb(self, freq):
+        return max(0, min(255, int(round((freq-1500.0) / 3.1372549))))
 
 
     def decode_image(self, template, recording):
@@ -187,12 +238,7 @@ class Decoder():
                         lines.append(gbr)
                         gbr = [[], [], []]
                     else:
-                        color = (r_f-1500)/3.1372549
-                        if state == 0:
-                            color *= 256
-                        elif state == 1:
-                            color *= 65536
-
+                        color = self.hz_to_rgb(r_f)
                         gbr[state].append(int(color))
 
             i += 1

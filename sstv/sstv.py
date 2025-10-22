@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-from PIL import Image
 import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import wave
 from encoder import *
 from decoder import *
+from img import load_image
 
 # http://lionel.cordesses.free.fr/gpages/Cordesses.pdf
 # https://web.archive.org/web/20241227121817/http://www.barberdsp.com/downloads/Dayton%20Paper.pdf
@@ -40,11 +42,14 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
         print(f'[!] Unknown encoder or mode provided!')
         sys.exit(1)
 
-    img = Image.open(img_path).convert('RGB')
+    w,h,data = load_image(img_path)
 
-    w,h = e.enc['width'], e.enc['height']
-    img = img.resize((w, h), Image.LANCZOS) # TODO handle
-    # img.save('output.png')
+    ew,eh = e.enc['width'],e.enc['height']
+    if (w,h) != (ew,eh):
+        # TODO provide tool
+        print(f'[!] Error: input image dimensions ({w},{h}) not supported by encoding mode ({ew},{eh})')
+        print('[!] Please find a way to re-size or crop your image')
+        print('[!] Expect program to crash soon...')
 
     if intro_tone:
         e.generate_intro()
@@ -56,7 +61,6 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     else:
         e.generate_phasing_interval()
 
-    data = memoryview(img.tobytes())
     e.encode_image(data)
 
     e.__del__()
@@ -67,10 +71,24 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
 
 
 def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
+    opath_ext = out_path.split('.')[-1]
+
+    assert iformat in ['TIFF', 'TIF', 'BMP', 'PNG']
+
+    if opath_ext != iformat:
+        fixed_path = out_path.replace(f'.{opath_ext.lower()}', f'.{iformat.lower()}')
+        if fixed_path.endswith('.tiff'):
+            fixed_path = fixed_path[:-1]
+
+        print(f'Your output path file extension [{opath_ext.upper()}] does not match the specified format [{iformat.upper()}]')
+        choice = input(f'Would you like to change the output path to {fixed_path}? (Y/n) ')
+        if not choice.lower() == 'n':
+            out_path = fixed_path
+            print(f'[+] New output path: {out_path}')
+
+
     print(f'[.] Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}')
     print(f'[.] Using output parameters: format={iformat}')
-
-    assert iformat.upper() in ['TIFF', 'TIF', 'BMP', 'PNG']
 
     f = open(out_path, 'wb')
     try:
