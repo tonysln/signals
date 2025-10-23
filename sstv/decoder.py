@@ -189,13 +189,11 @@ class Decoder():
         pass
 
 
-    def decode_VIS(self, vis_raw):
-        vis = 0
-        for v in vis_raw[::-1]:
-            pass
-        
+    def decode_VIS(self, vis_raw, parity_raw):
+        vis = int(reversed(vis_raw), 2)
         parity = sum(vis_raw) % 2 == 0
 
+        assert parity == (parity_raw == '1')
         assert vis in self.modes
 
         return self.modes[vis]
