@@ -7,6 +7,10 @@ from ctypes import c_char_p, c_int, POINTER, c_ubyte, byref, c_ulong
 lib = ctypes.CDLL("../lib/libimg.so")
 lib.load_png.argtypes = [c_char_p, POINTER(c_ubyte), POINTER(c_ulong), POINTER(c_ulong)]
 lib.load_png.restype = c_int
+lib.load_tiff.argtypes = [c_char_p, POINTER(c_ubyte), POINTER(c_ulong), POINTER(c_ulong)]
+lib.load_tiff.restype = c_int
+lib.load_bmp.argtypes = [c_char_p, POINTER(c_ubyte), POINTER(c_ulong), POINTER(c_ulong)]
+lib.load_bmp.restype = c_int
 lib.free_image.argtypes = [POINTER(c_ubyte)]
 lib.free_image.restype = None
 

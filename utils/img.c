@@ -34,12 +34,12 @@ int load_png(const char *path, unsigned char *out, unsigned long *width, unsigne
     return 0;
 }
 
-int load_tiff(const char *path, unsigned char **out, int *width, int *height) {
+int load_tiff(const char *path, unsigned char *out, unsigned long *width, unsigned long *height) {
     return 0;
 }
 
-int load_bmp(const char *path, unsigned char **out, int *width, int *height) {
-    
+int load_bmp(const char *path, unsigned char *out, unsigned long *width, unsigned long *height) {
+    return 0;
 }
 
 void free_image(unsigned char *data) {
