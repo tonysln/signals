@@ -3,6 +3,7 @@ import wave
 import struct
 import math
 from encoder import *
+from ctypes import POINTER, c_double, c_int
 
 
 class Decoder():
@@ -46,20 +47,20 @@ class Decoder():
 
 
     def load_libfft(self):
-        lib = ctypes.CDLL('../libfft.so')
-        lib.fft.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib = ctypes.CDLL('../lib/libfft.so')
+        lib.fft.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
         lib.fft.restype = None
-        lib.ifft.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.ifft.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
         lib.ifft.restype = None
-        lib.dct.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.dct.argtypes = [POINTER(c_double), c_int]
         lib.dct.restype = None
-        lib.hann.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.hann.argtypes = [POINTER(c_double), c_int]
         lib.hann.restype = None
-        lib.filter.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.filter.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
         lib.filter.restype = None
-        lib.fft_mag_pwr.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.c_int]
-        lib.fft_mag_pwr.restype = ctypes.c_double
-        lib.mag_log.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+        lib.fft_mag_pwr.argtypes = [POINTER(c_double), POINTER(c_double), POINTER(c_double), c_int]
+        lib.fft_mag_pwr.restype = c_double
+        lib.mag_log.argtypes = [POINTER(c_double), c_int]
         lib.mag_log.restype = None
         self.lib = lib
 
@@ -102,7 +103,7 @@ class Decoder():
 
         fbins = [j * self.sr / N for j in range(0, N//2)]
 
-        DoubleArray = ctypes.c_double * N
+        DoubleArray = c_double * N
         hann = DoubleArray(*[0.0]*N)
         self.lib.hann(hann, N)
 

@@ -1,0 +1,49 @@
+/*
+  img.c
+
+  Resources:
+  https://www.libpng.org/pub/png/book/chapter13.html
+  https://git.fmrib.ox.ac.uk/fsl/miscvis/-/tree/2007.0
+    
+  Build:
+  gcc -O3 -shared -fPIC img.c -o libimg.so -lpng -ltiff
+*/
+
+#include <stdlib.h>
+#include <stdio.h>
+#include "readpng.c"
+
+
+int load_png(const char *path, unsigned char *out, unsigned long *width, unsigned long *height) {
+    unsigned char bg_red=0, bg_green=0, bg_blue=0;
+    double display_exponent = 1.0 * 2.2;
+    unsigned long image_rowbytes;
+    int image_channels;
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) 
+        return -1;
+
+    readpng_init(fp, width, height);
+    readpng_get_bgcolor(&bg_red, &bg_green, &bg_blue);
+
+    out = readpng_get_image(display_exponent, &image_channels, &image_rowbytes);
+    
+    readpng_cleanup(FALSE);
+    fclose(fp);
+    return 0;
+}
+
+int load_tiff(const char *path, unsigned char **out, int *width, int *height) {
+    return 0;
+}
+
+int load_bmp(const char *path, unsigned char **out, int *width, int *height) {
+    
+}
+
+void free_image(unsigned char *data) {
+    readpng_cleanup(TRUE);
+    free(data);
+    data = NULL;
+}
