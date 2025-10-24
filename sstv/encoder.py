@@ -82,11 +82,11 @@ class Encoder():
 
         vis_bits = self.dec_to_bin_lsb(self.enc['vis'])
         for bit in vis_bits: # LSB, 7 data
-            hz = 1100 if bit else 1300
+            hz = [1300,1100][bit]
             self.generate_tone(f_hz=hz, t_ms=30)
         
         even_parity = sum(vis_bits) % 2 == 0
-        hz = 1300 if even_parity else 1100
+        hz = [1100,1300][even_parity]
         self.generate_tone(f_hz=hz, t_ms=30) # parity bit
         self.generate_tone(f_hz=1200, t_ms=30) # stop bit
 

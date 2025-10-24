@@ -190,13 +190,21 @@ class Decoder():
 
 
     def decode_VIS(self, vis_raw, parity_raw):
-        vis = int(reversed(vis_raw), 2)
-        parity = sum(vis_raw) % 2 == 0
+        vis = self.bin_to_dec_lsb(vis_raw)
+        parity = [1,0][sum(vis_raw) % 2 == 0]
 
-        assert parity == (parity_raw == '1')
+        assert parity == parity_raw
         assert vis in self.modes
 
         return self.modes[vis]
+
+
+    def bin_to_dec_lsb(self, bits_list, n=0x40):
+        res = 0
+        for i,bit in enumerate(reversed(bits_list)):
+            if bit:
+                res |= (n >> i)
+        return res
 
 
     def decode_phasing_interval(self):
