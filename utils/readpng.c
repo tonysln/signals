@@ -154,9 +154,14 @@ uch *readpng_get_image(double display_exponent, int *pChannels, ulg *pRowbytes)
         color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
         png_set_gray_to_rgb(png_ptr);
 
-
     if (png_get_gAMA(png_ptr, info_ptr, &gamma))
         png_set_gamma(png_ptr, display_exponent, gamma);
+
+
+    // Always convert to RGB, compositing transparency with black
+    png_color_16 black_bg = {0, 0, 0, 0, 0};
+    png_set_background(png_ptr, &black_bg, PNG_BACKGROUND_GAMMA_SCREEN, 0, 1.0);
+    png_set_strip_alpha(png_ptr);
 
 
     png_read_update_info(png_ptr, info_ptr);

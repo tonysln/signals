@@ -5,6 +5,8 @@
   https://www.libpng.org/pub/png/book/chapter13.html
   https://git.fmrib.ox.ac.uk/fsl/miscvis/-/tree/2007.0
   https://web.cs.ucdavis.edu/~amenta/s04/image/
+  https://libtiff.gitlab.io/libtiff/libtiff.html
+  https://stackoverflow.com/a/38480562
     
   Build:
   gcc -O3 -shared -fPIC img.c -o libimg.so -lpng -lz -ltiff
@@ -12,8 +14,10 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "readpng.c"
 #include "readBMP.c"
+#include "tiffio.h"
 
 
 int load_png(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
@@ -37,6 +41,57 @@ int load_png(const char *path, unsigned char **out, unsigned long *width, unsign
 }
 
 int load_tiff(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
+    uint32_t w, h;
+    uint32* raster;
+    unsigned char *buf;
+
+    TIFF* tiff = TIFFOpen(path, "r");
+    if (!tiff)
+        return -1;
+
+    if (TIFFGetField(tiff,TIFFTAG_IMAGEWIDTH, &w) != 1) {
+        TIFFClose(tiff);
+        return -2;
+    }
+
+    if (TIFFGetField(tiff,TIFFTAG_IMAGELENGTH, &h) != 1) {
+        TIFFClose(tiff);
+        return -3;
+    }
+
+    *width = (unsigned long) w;
+    *height = (unsigned long) h;
+
+    raster = (uint32*) _TIFFmalloc(w*h * sizeof (uint32_t));
+    if (!raster) {
+        TIFFClose(tiff);
+        return -4;
+    }
+    
+    if (!TIFFReadRGBAImage(tiff, w, h, raster, 0)) {
+        _TIFFfree(raster);
+        TIFFClose(tiff);
+        return -5;
+    }
+
+    buf = (unsigned char *) malloc(w*h * 3);
+    if (!buf) {
+        _TIFFfree(raster);
+        TIFFClose(tiff);
+        return -6;
+    }
+
+    for (uint32 i = 0, j = 0; i < w*h; ++i) {
+        uint32 p = raster[i];
+        buf[j++] = TIFFGetR(p);
+        buf[j++] = TIFFGetG(p);
+        buf[j++] = TIFFGetB(p);
+    }
+
+    *out = buf;
+
+    _TIFFfree(raster);
+    TIFFClose(tiff);
     return 0;
 }
 

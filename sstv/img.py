@@ -1,6 +1,6 @@
 import struct
 import ctypes
-from ctypes import c_char_p, c_int, POINTER, c_ubyte, byref, c_ulong, string_at
+from ctypes import c_char_p, c_int, POINTER, c_ubyte, byref, c_ulong, string_at, c_bool
 
 
 lib = ctypes.CDLL("../lib/libimg.so")
@@ -28,8 +28,9 @@ def load_image(path):
         buf = POINTER(c_ubyte)()
         w, h = c_ulong(), c_ulong()
 
-        if LD[ext](path.encode('utf-8'), byref(buf), byref(w), byref(h)) != 0:
-            raise RuntimeError("Failed to load image")
+        res = LD[ext](path.encode('utf-8'), byref(buf), byref(w), byref(h))
+        if res != 0:
+            raise RuntimeError(f"Failed to load image: error code {res}")
 
         size = w.value * h.value * 3
         data = string_at(buf, size)
