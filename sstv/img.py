@@ -5,7 +5,7 @@ from ctypes import c_char_p, c_int, POINTER, c_ubyte, byref, c_ulong
 
 
 lib = ctypes.CDLL("../lib/libimg.so")
-lib.load_png.argtypes = [c_char_p, POINTER(c_ubyte), POINTER(c_ulong), POINTER(c_ulong)]
+lib.load_png.argtypes = [c_char_p, POINTER(POINTER(c_ubyte)), POINTER(c_ulong), POINTER(c_ulong)]
 lib.load_png.restype = c_int
 lib.load_tiff.argtypes = [c_char_p, POINTER(c_ubyte), POINTER(c_ulong), POINTER(c_ulong)]
 lib.load_tiff.restype = c_int
@@ -22,16 +22,15 @@ def load_BMP(path):
 def load_PNG(path):
     buf = POINTER(c_ubyte)()
     w, h = c_ulong(), c_ulong()
-
-    if lib.load_png(path.encode('utf-8'), buf, byref(w), byref(h)) != 0:
+    if lib.load_png(path.encode('utf-8'), byref(buf), byref(w), byref(h)) != 0:
         raise RuntimeError("Failed to load PNG")
 
     size = w.value * h.value * 3
     data = ctypes.string_at(buf, size)
+    # data = ctypes.memoryview_at(buf, size) nb! 3.14 feature
     print(f'[.] Detected PNG size: ({w.value},{h.value})')
 
     lib.free_image(buf)
-    del buf
     return w.value, h.value, memoryview(data)
 
 

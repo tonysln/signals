@@ -14,7 +14,7 @@
 #include "readpng.c"
 
 
-int load_png(const char *path, unsigned char *out, unsigned long *width, unsigned long *height) {
+int load_png(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
     unsigned char bg_red=0, bg_green=0, bg_blue=0;
     double display_exponent = 1.0 * 2.2;
     unsigned long image_rowbytes;
@@ -27,7 +27,7 @@ int load_png(const char *path, unsigned char *out, unsigned long *width, unsigne
     readpng_init(fp, width, height);
     readpng_get_bgcolor(&bg_red, &bg_green, &bg_blue);
 
-    out = readpng_get_image(display_exponent, &image_channels, &image_rowbytes);
+    *out = readpng_get_image(display_exponent, &image_channels, &image_rowbytes);
     
     readpng_cleanup(FALSE);
     fclose(fp);
@@ -43,7 +43,6 @@ int load_bmp(const char *path, unsigned char *out, unsigned long *width, unsigne
 }
 
 void free_image(unsigned char *data) {
-    readpng_cleanup(TRUE);
     free(data);
     data = NULL;
 }
