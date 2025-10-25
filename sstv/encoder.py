@@ -56,9 +56,13 @@ class Encoder():
         self.last_sample = end_sample
 
 
-    def encode_image(self, data):
+    def encode_image(self, data, ext):
         print('[.] Encoding image data...')
         for y in range(self.enc['height']):
+            # Reversed rows for BMP
+            if ext == 'bmp':
+                y = self.enc['height'] - y - 1
+
             w = self.enc['width']
             self.encode_line(data[y*w*3 : (y+1)*w*3])
 

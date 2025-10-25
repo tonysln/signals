@@ -42,7 +42,7 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
         print(f'[!] Unknown encoder or mode provided!')
         sys.exit(1)
 
-    w,h,data = load_image(img_path)
+    ext,w,h,data = load_image(img_path)
 
     ew,eh = e.enc['width'],e.enc['height']
     if (w,h) != (ew,eh):
@@ -61,7 +61,7 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     else:
         e.generate_phasing_interval()
 
-    e.encode_image(data)
+    e.encode_image(data, ext)
 
     e.__del__()
     if not wav and not f.closed:

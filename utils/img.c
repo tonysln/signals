@@ -4,14 +4,16 @@
   Resources:
   https://www.libpng.org/pub/png/book/chapter13.html
   https://git.fmrib.ox.ac.uk/fsl/miscvis/-/tree/2007.0
+  https://web.cs.ucdavis.edu/~amenta/s04/image/
     
   Build:
-  gcc -O3 -shared -fPIC img.c -o libimg.so -lpng -ltiff
+  gcc -O3 -shared -fPIC img.c -o libimg.so -lpng -lz -ltiff
 */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include "readpng.c"
+#include "readBMP.c"
 
 
 int load_png(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
@@ -34,11 +36,27 @@ int load_png(const char *path, unsigned char **out, unsigned long *width, unsign
     return 0;
 }
 
-int load_tiff(const char *path, unsigned char *out, unsigned long *width, unsigned long *height) {
+int load_tiff(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
     return 0;
 }
 
-int load_bmp(const char *path, unsigned char *out, unsigned long *width, unsigned long *height) {
+int load_bmp(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
+    Image *image;
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) 
+        return -1;
+
+    image = (Image *) malloc(sizeof(Image));
+    if (!ImageLoad(fp, image))
+        return -2;
+
+    *width = image->sizeX;
+    *height = image->sizeY;
+    *out = image->data;
+
+    free(image);
+    fclose(fp);
     return 0;
 }
 
