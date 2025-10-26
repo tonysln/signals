@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <jpeglib.h>
 #include <jerror.h>
-#include "readpng.c"
+#include "readPNG.c"
 #include "readBMP.c"
 
 

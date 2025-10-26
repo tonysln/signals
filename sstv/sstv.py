@@ -3,10 +3,12 @@
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import wave
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+
 from encoder import *
 from decoder import *
 from img import load_image
@@ -50,8 +52,12 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     ew,eh = e.enc['width'],e.enc['height']
     if (w,h) != (ew,eh):
         logger.warning(f'Error: input image dimensions ({w},{h}) not supported by encoding mode ({ew},{eh})')
-        logger.warning('Please find a way to re-size or crop your image')
-        logger.warning('Expect program to crash soon...')
+        logger.warning('Please find a way to re-size your image')
+        if w < ew or h < eh:
+            logger.error('Stopping program execution')
+            f.close()
+            del data
+            sys.exit(3)
 
     if intro_tone:
         e.generate_intro()
@@ -66,6 +72,7 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     e.encode_image(data, ext)
 
     e.__del__()
+    del data
     if not wav and not f.closed:
         f.close()
 
@@ -75,7 +82,7 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
 def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
     opath_ext = out_path.split('.')[-1]
 
-    assert iformat in ['TIFF', 'TIF', 'BMP', 'PNG']
+    assert iformat in ['JPEG', 'JPG', 'BMP', 'PNG']
 
     if opath_ext != iformat:
         fixed_path = out_path.replace(f'.{opath_ext.lower()}', f'.{iformat.lower()}')

@@ -40,6 +40,9 @@ Encoding
 	        PD240 640x496
 	        PD290 800x616
 
+	Important: source image size must be exact and compatible with the encoding mode.
+	Tools like ImageMagick (convert) can be used to re-size chosen image.
+
 
 Decoding
 	Supported input audio formats: WAV.
@@ -58,7 +61,7 @@ Required tools and libraries
 
 Usage
 	If running for the first time, execute build.sh to generate libfft.so and libimg.so. 
-	These simple libraries are used to load images into memory and to run FFT on audio.
+	These simple libraries are used to read & write images and to run FFT on audio.
 	
 	Encode:
 		./sstv.py --encode SOURCE --out TARGET --encoding ENCODING --mode MODE
