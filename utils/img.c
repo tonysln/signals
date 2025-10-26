@@ -5,19 +5,20 @@
   https://www.libpng.org/pub/png/book/chapter13.html
   https://git.fmrib.ox.ac.uk/fsl/miscvis/-/tree/2007.0
   https://web.cs.ucdavis.edu/~amenta/s04/image/
-  https://libtiff.gitlab.io/libtiff/libtiff.html
-  https://stackoverflow.com/a/38480562
+  https://www.tspi.at/2020/03/20/libjpegexample.html#gsc.tab=0
+  http://apodeline.free.fr/DOC/libjpeg/libjpeg-2.html
     
   Build:
-  gcc -O3 -shared -fPIC img.c -o libimg.so -lpng -lz -ltiff
+  gcc -O3 -shared -fPIC img.c -o libimg.so -lpng -lz -ljpeg
 */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <jpeglib.h>
+#include <jerror.h>
 #include "readpng.c"
 #include "readBMP.c"
-#include "tiffio.h"
 
 
 int load_png(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
@@ -40,58 +41,63 @@ int load_png(const char *path, unsigned char **out, unsigned long *width, unsign
     return 0;
 }
 
-int load_tiff(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
-    uint32_t w, h;
-    uint32* raster;
-    unsigned char *buf;
+int load_jpg(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
+    struct jpeg_decompress_struct info;
+    struct jpeg_error_mgr err;
+    unsigned long int imgWidth, imgHeight, bsize;
+    unsigned int sclen, sccnt;
+    unsigned char* buf;
+    JSAMPROW lineBuf;
 
-    TIFF* tiff = TIFFOpen(path, "r");
-    if (!tiff)
+    FILE *fp = fopen(path, "rb");
+    if (!fp) 
         return -1;
 
-    if (TIFFGetField(tiff,TIFFTAG_IMAGEWIDTH, &w) != 1) {
-        TIFFClose(tiff);
+    info.err = jpeg_std_error(&err);
+    jpeg_create_decompress(&info);
+
+    jpeg_stdio_src(&info, fp);
+    jpeg_read_header(&info, TRUE);
+    if (!jpeg_start_decompress(&info)) {
+        jpeg_destroy_decompress(&info);
+        fclose(fp);
         return -2;
     }
 
-    if (TIFFGetField(tiff,TIFFTAG_IMAGELENGTH, &h) != 1) {
-        TIFFClose(tiff);
+    imgWidth = info.output_width;
+    imgHeight = info.output_height;
+
+    bsize = imgWidth * imgHeight * 3;
+    buf = (unsigned char*) malloc(sizeof(unsigned char)*bsize);
+    if (!buf) {
+        jpeg_destroy_decompress(&info);
+        fclose(fp);
         return -3;
     }
 
-    *width = (unsigned long) w;
-    *height = (unsigned long) h;
+    sclen = info.output_width * info.output_components;
+    sccnt = 0;
 
-    raster = (uint32*) _TIFFmalloc(w*h * sizeof (uint32_t));
-    if (!raster) {
-        TIFFClose(tiff);
-        return -4;
-    }
-    
-    if (!TIFFReadRGBAImage(tiff, w, h, raster, 0)) {
-        _TIFFfree(raster);
-        TIFFClose(tiff);
-        return -5;
-    }
-
-    buf = (unsigned char *) malloc(w*h * 3);
-    if (!buf) {
-        _TIFFfree(raster);
-        TIFFClose(tiff);
-        return -6;
-    }
-
-    for (uint32 i = 0, j = 0; i < w*h; ++i) {
-        uint32 p = raster[i];
-        buf[j++] = TIFFGetR(p);
-        buf[j++] = TIFFGetG(p);
-        buf[j++] = TIFFGetB(p);
+    while (info.output_scanline < info.output_height) {
+        lineBuf = (buf + (sccnt * sclen));
+        if (!jpeg_read_scanlines(&info, &lineBuf, 1)) {
+            jpeg_destroy_decompress(&info);
+            fclose(fp);
+            return -4;
+        }
+        sccnt++;
     }
 
     *out = buf;
+    *width = imgWidth;
+    *height = imgHeight;
 
-    _TIFFfree(raster);
-    TIFFClose(tiff);
+    bool ok = jpeg_finish_decompress(&info);
+    jpeg_destroy_decompress(&info);
+    fclose(fp);
+    if (!ok)
+        return -5;
+
     return 0;
 }
 

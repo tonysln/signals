@@ -32,7 +32,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <png.h>
-#include "readpng.h"
+
+
+typedef unsigned char   uch;
+typedef unsigned short  ush;
+typedef unsigned long   ulg;
+
 
 /* future versions of libpng will provide this macro: */
 #ifndef png_jmpbuf
@@ -179,8 +184,6 @@ uch *readpng_get_image(double display_exponent, int *pChannels, ulg *pRowbytes)
         image_data = NULL;
         return NULL;
     }
-
-    Trace((stderr, "readpng_get_image:  channels = %d, rowbytes = %ld, height = %ld\n", *pChannels, rowbytes, height));
 
     for (i = 0;  i < height;  ++i)
         row_pointers[i] = image_data + i*rowbytes;

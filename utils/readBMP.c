@@ -8,7 +8,15 @@
 
 #include <stdio.h>      // Header file for standard file i/o.
 #include <stdlib.h>     // Header file for malloc/free.
-#include "readBMP.h"
+
+
+struct Image {
+    unsigned long sizeX;
+    unsigned long sizeY;
+    unsigned char *data;
+};
+typedef struct Image Image;
+
 
 /* Simple BMP reading code, should be adaptable to many
 systems. Originally from Windows, ported to Linux, now works on my Mac
@@ -98,7 +106,7 @@ int ImageLoad(FILE *file, Image *image) {
     fseek(file, 24, SEEK_CUR);
 
     // read the data. 
-    image->data = (char *) malloc(size);
+    image->data = (unsigned char *) malloc(size);
     if (image->data == NULL) {
 	printf("Error allocating memory for color-corrected image data");
 	return -7;	

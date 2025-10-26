@@ -2,7 +2,7 @@ SSTV Encoder & Decoder
 
 
 Encoding
-	Supported input image formats: PNG, TIFF, BMP.
+	Supported input image formats: PNG, JPEG, BMP.
 	Supported output audio formats: WAV.
 
 	Available encoders and modes:
