@@ -41,7 +41,6 @@ Encoding
 	        PD290 800x616
 
 	Important: source image size must be exact and compatible with the encoding mode.
-	Tools like ImageMagick (convert) can be used to re-size chosen image.
 
 
 Decoding
@@ -59,12 +58,19 @@ Required tools and libraries
 	libjpeg
 
 
+Optional tools
+	ImageMagick
+
+
 Usage
 	If running for the first time, execute build.sh to generate libfft.so and libimg.so. 
 	These simple libraries are used to read & write images and to run FFT on audio.
 	
 	Encode:
 		./sstv.py --encode SOURCE --out TARGET --encoding ENCODING --mode MODE
+
+		Alternatively, to auto-resize the source image (ImageMagick required):
+			./encode.sh SOURCE TARGET ENCODING MODE
 
 	Decode:
 		./sstv.py --decode SOURCE --out TARGET --format IMG_FORMAT ...

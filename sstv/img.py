@@ -24,7 +24,7 @@ LD = {
 
 
 def load_image(path):
-    ext = path.split('.')[-1].lower()
+    ext = path.replace('.tmp', '').split('.')[-1].lower()
 
     if ext in LD:
         logger.info(f'Detected image format: {ext.upper()}')

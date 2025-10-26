@@ -191,6 +191,7 @@ if __name__ == '__main__':
     sr = 44100
     wav = True
     intro = False
+    get_size = False
     for arg in args:
         if arg in ['--encode', '--decode']:
             func = arg
@@ -209,7 +210,16 @@ if __name__ == '__main__':
             wav = False
         elif arg == '--vox':
             intro = True
+        elif arg == '--get_size':
+            get_size = True
 
+    # convert tool helper: print chosen encoding image size as WxH 
+    if get_size and encoding and mode:
+        if encoding in ENCODERS and mode in ENCODERS[encoding].opts:
+            em = ENCODERS[encoding].opts[mode]
+            print(f"{em['width']}x{em['height']}")
+        
+        sys.exit(1)
 
     if in_path and out_path:
         if func == '--encode' and encoding and mode:
