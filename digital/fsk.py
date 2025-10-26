@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import sys
+import logging
+logger = logging.getLogger(__name__)
 
 
 class FSKEncoder():
@@ -12,7 +14,7 @@ class FSKEncoder():
         self.A = 32767
         self.file = f
 
-        print(f'[.] Using sample rate {self.SR} Hz')
+        logger.info(f'Using sample rate {self.SR} Hz')
 
         self.baud = 1200
         self.mark_hz = 1200
@@ -40,4 +42,4 @@ if __name__ == '__main__':
         sys.exit(1)
 
 
-    print('Done.')
+    logger.info('Done.')

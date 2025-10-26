@@ -4,6 +4,8 @@ import struct
 import math
 from encoder import *
 from ctypes import POINTER, c_double, c_int
+import logging
+logger = logging.getLogger(__name__)
 
 
 class Decoder():
@@ -66,7 +68,7 @@ class Decoder():
 
 
     def read_wav(self, in_path, chunk_size=4096):
-        print('[.] Reading WAV samples...')
+        logger.info('Reading WAV samples...')
         self.pcm_samples = []
 
         with wave.open(in_path, 'r') as f:
@@ -99,7 +101,7 @@ class Decoder():
 
 
     def process_pcm_samples(self, N=1024, hop=512):
-        print('[.] Processing PCM stream...')
+        logger.info('Processing PCM stream...')
 
         fbins = [j * self.sr / N for j in range(0, N//2)]
 

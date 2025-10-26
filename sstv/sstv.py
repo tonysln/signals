@@ -4,6 +4,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import wave
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 from encoder import *
 from decoder import *
 from img import load_image
@@ -39,17 +42,16 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     try:
         e = ENCODERS[encoding](f, wav, mode, sr)
     except AssertionError:
-        print(f'[!] Unknown encoder or mode provided!')
+        logger.error(f'Unknown encoder or mode provided!')
         sys.exit(1)
 
     ext,w,h,data = load_image(img_path)
 
     ew,eh = e.enc['width'],e.enc['height']
     if (w,h) != (ew,eh):
-        # TODO provide tool
-        print(f'[!] Error: input image dimensions ({w},{h}) not supported by encoding mode ({ew},{eh})')
-        print('[!] Please find a way to re-size or crop your image')
-        print('[!] Expect program to crash soon...')
+        logger.warning(f'Error: input image dimensions ({w},{h}) not supported by encoding mode ({ew},{eh})')
+        logger.warning('Please find a way to re-size or crop your image')
+        logger.warning('Expect program to crash soon...')
 
     if intro_tone:
         e.generate_intro()
@@ -84,17 +86,17 @@ def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
         choice = input(f'Would you like to change the output path to {fixed_path}? (Y/n) ')
         if not choice.lower() == 'n':
             out_path = fixed_path
-            print(f'[+] New output path: {out_path}')
+            print(f'New output path: {out_path}')
 
 
-    print(f'[.] Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}')
-    print(f'[.] Using output parameters: format={iformat}')
+    logger.info(f'Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}')
+    logger.info(f'Using output parameters: format={iformat}')
 
     f = open(out_path, 'wb')
     try:
         e = DECODERS['General'](f, iformat, encoding, mode, sr)
     except AssertionError:
-        print(f'[!] Unknown encoder or mode provided!')
+        logger.error(f'Unknown encoder or mode provided!')
         sys.exit(1)
 
     if wave:
@@ -155,7 +157,7 @@ def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
 
 
 def print_help():
-    print('[!] Usage:\n\t./sstv.py ...')
+    print('Usage:\n\t./sstv.py ...')
     print('\nAvailable encoders and modes:')
     for key in ENCODERS.keys():
         print(f'{" "*4}{key}:')
@@ -204,13 +206,13 @@ if __name__ == '__main__':
 
     if in_path and out_path:
         if func == '--encode' and encoding and mode:
-            print(f'[+] Encoding {in_path}...')
+            logger.info(f'Encoding {in_path}...')
             if encode(in_path, out_path, encoding, mode, intro, sr, wav):
-                print(f'[+] Wrote output to {out_path}')
+                logger.info(f'Wrote output to {out_path}')
 
         elif func == '--decode':
-            print(f'[+] Decoding {in_path}...')
+            logger.info(f'Decoding {in_path}...')
             if decode(in_path, out_path, iformat, sr, wav, encoding, mode, intro):
-                print(f'[+] Wrote output to {out_path}')
+                logger.info(f'Wrote output to {out_path}')
 
-    print('Done.')
+    logger.info('Done.')

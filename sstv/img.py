@@ -1,6 +1,8 @@
 import struct
 import ctypes
 from ctypes import c_char_p, c_int, POINTER, c_ubyte, byref, c_ulong, string_at, c_bool
+import logging
+logger = logging.getLogger(__name__)
 
 
 lib = ctypes.CDLL("../lib/libimg.so")
@@ -25,7 +27,7 @@ def load_image(path):
     ext = path.split('.')[-1].lower()
 
     if ext in LD:
-        print(f'[+] Detected image format: {ext.upper()}')
+        logger.info(f'Detected image format: {ext.upper()}')
 
         buf = POINTER(c_ubyte)()
         w, h = c_ulong(), c_ulong()
@@ -37,11 +39,11 @@ def load_image(path):
         size = w.value * h.value * 3
         data = string_at(buf, size)
         # data = ctypes.memoryview_at(buf, size) nb! 3.14 feature
-        print(f'[+] Detected image size: ({w.value},{h.value})')
+        logger.info(f'Detected image size: ({w.value},{h.value})')
 
         lib.free_image(buf)
         return (ext, w.value, h.value, memoryview(data))
 
 
-    print(f'[!] Error: provided image format is not supported: {ext.upper()}')
+    logger.error(f'Error: provided image format is not supported: {ext.upper()}')
     raise ValueError('Unsupported image format')

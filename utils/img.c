@@ -44,8 +44,7 @@ int load_png(const char *path, unsigned char **out, unsigned long *width, unsign
 int load_jpg(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
     struct jpeg_decompress_struct info;
     struct jpeg_error_mgr err;
-    unsigned long int imgWidth, imgHeight, bsize;
-    unsigned int sclen, sccnt;
+    unsigned long int iw, ih, ic, bsize, sclen, sccnt;
     unsigned char* buf;
     JSAMPROW lineBuf;
 
@@ -64,10 +63,11 @@ int load_jpg(const char *path, unsigned char **out, unsigned long *width, unsign
         return -2;
     }
 
-    imgWidth = info.output_width;
-    imgHeight = info.output_height;
+    iw = info.output_width;
+    ih = info.output_height;
+    ic = info.output_components;
 
-    bsize = imgWidth * imgHeight * 3;
+    bsize = iw * ih * 3;
     buf = (unsigned char*) malloc(sizeof(unsigned char)*bsize);
     if (!buf) {
         jpeg_destroy_decompress(&info);
@@ -75,7 +75,7 @@ int load_jpg(const char *path, unsigned char **out, unsigned long *width, unsign
         return -3;
     }
 
-    sclen = info.output_width * info.output_components;
+    sclen = iw * ic;
     sccnt = 0;
 
     while (info.output_scanline < info.output_height) {
@@ -89,8 +89,8 @@ int load_jpg(const char *path, unsigned char **out, unsigned long *width, unsign
     }
 
     *out = buf;
-    *width = imgWidth;
-    *height = imgHeight;
+    *width = iw;
+    *height = ih;
 
     bool ok = jpeg_finish_decompress(&info);
     jpeg_destroy_decompress(&info);

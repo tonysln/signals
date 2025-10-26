@@ -53,4 +53,19 @@ Required tools and libraries
 	GCC
 	zlib
 	libpng
-	libtiff
+	libjpeg
+
+
+Usage
+	If running for the first time, execute build.sh to generate libfft.so and libimg.so. 
+	These simple libraries are used to load images into memory and to run FFT on audio.
+	
+	Encode:
+		./sstv.py --encode SOURCE --out TARGET --encoding ENCODING --mode MODE
+
+	Decode:
+		./sstv.py --decode SOURCE --out TARGET --format IMG_FORMAT ...
+
+	Optional arguments:
+		--vox 
+		...

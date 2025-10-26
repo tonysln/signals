@@ -3,6 +3,8 @@ import struct
 import array
 import wave
 from functools import lru_cache
+import logging
+logger = logging.getLogger(__name__)
 
 
 class Encoder():
@@ -15,7 +17,7 @@ class Encoder():
         self.file = f
         self.wav = wave
 
-        print(f'[.] Using sample rate {self.SR} Hz')
+        logger.info(f'Using sample rate {self.SR} Hz')
 
         self.lum_w_hz = 2300
         self.lum_b_hz = 1500
@@ -24,10 +26,10 @@ class Encoder():
         self.intro_tone_ms = 100
 
         if self.wav:
-            print('[.] Writing output as WAV')
+            logger.info('Writing output as WAV')
             self.file.setparams((1, 2, self.SR, 0, 'NONE', 'Uncompressed'))
         else:
-            print('[!] Writing output as raw PCM samples')
+            logger.info('Writing output as raw PCM samples')
 
 
     def generate_tone(self, f_hz, t_ms):
@@ -57,7 +59,7 @@ class Encoder():
 
 
     def encode_image(self, data, ext):
-        print('[.] Encoding image data...')
+        logger.info('Encoding image data...')
         for y in range(self.enc['height']):
             # Reversed rows for BMP
             if ext == 'bmp':
@@ -68,20 +70,20 @@ class Encoder():
 
 
     def generate_intro(self):
-        print('[+] Generating VOX intro code...')
+        logger.info('Generating VOX intro code...')
         for hz in self.intro_tone_hz:
             self.generate_tone(f_hz=hz, t_ms=self.intro_tone_ms)
 
 
     def generate_header(self):
-        print('[.] Generating header...')
+        logger.info('Generating header...')
         self.generate_tone(f_hz=1900, t_ms=300)
         self.generate_tone(f_hz=1200, t_ms=10)
         self.generate_tone(f_hz=1900, t_ms=300)
 
 
     def generate_VIS(self):
-        print('[.] Generating VIS code...')
+        logger.info('Generating VIS code...')
         self.generate_tone(f_hz=1200, t_ms=30) # start bit
 
         vis_bits = self.dec_to_bin_lsb(self.enc['vis'])
@@ -148,7 +150,7 @@ class MartinEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using MartinEncoder with mode {mode}')
+        logger.info(f'Using MartinEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 4.862
         self.t1_hz = 1500
@@ -206,7 +208,7 @@ class ScottieEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using ScottieEncoder with mode {mode}')
+        logger.info(f'Using ScottieEncoder with mode {mode}')
         self.first_line_done = False
         self.sync_hz = 1200
         self.sync_ms = 9
@@ -266,7 +268,7 @@ class WrasseEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using WrasseEncoder with mode {mode}')
+        logger.info(f'Using WrasseEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 5.5225
         self.t1_hz = 1500
@@ -322,7 +324,7 @@ class PasokonEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using PasokonEncoder with mode {mode}')
+        logger.info(f'Using PasokonEncoder with mode {mode}')
 
 
     def encode_line(self, line):
@@ -388,7 +390,7 @@ class PDEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using PDEncoder with mode {mode}')
+        logger.info(f'Using PDEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 20
         self.t1_hz = 1500
@@ -449,7 +451,7 @@ class RobotEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using RobotEncoder with mode {mode}')
+        logger.info(f'Using RobotEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 9
         self.t1_hz = 1500
@@ -519,7 +521,7 @@ class FAXEncoder(Encoder):
         self.mode = mode
         self.enc = self.opts[self.mode]
         super().__init__(f, wav, sr)
-        print(f'[.] Using FAXEncoder with mode {mode}')
+        logger.info(f'Using FAXEncoder with mode {mode}')
         self.sync_hz = 1200
         self.sync_ms = 5.12
         self.t1_hz = 1500
