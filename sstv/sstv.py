@@ -79,29 +79,16 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     return True
 
 
-def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
-    opath_ext = out_path.split('.')[-1]
-
+def decode(in_path, out_path, sr, wave, encoding, mode, intro):
+    iformat = out_path.split('.')[-1].upper()
     assert iformat in ['JPEG', 'JPG', 'BMP', 'PNG']
-
-    if opath_ext != iformat:
-        fixed_path = out_path.replace(f'.{opath_ext.lower()}', f'.{iformat.lower()}')
-        if fixed_path.endswith('.tiff'):
-            fixed_path = fixed_path[:-1]
-
-        print(f'Your output path file extension [{opath_ext.upper()}] does not match the specified format [{iformat.upper()}]')
-        choice = input(f'Would you like to change the output path to {fixed_path}? (Y/n) ')
-        if not choice.lower() == 'n':
-            out_path = fixed_path
-            print(f'New output path: {out_path}')
-
 
     logger.info(f'Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}')
     logger.info(f'Using output parameters: format={iformat}')
 
     f = open(out_path, 'wb')
     try:
-        e = DECODERS['General'](f, iformat, encoding, mode, sr)
+        e = DECODERS['General'](f, encoding, mode, sr)
     except AssertionError:
         logger.error(f'Unknown encoder or mode provided!')
         sys.exit(1)
@@ -109,52 +96,30 @@ def decode(in_path, out_path, iformat, sr, wave, encoding, mode, intro):
     if wave:
         e.read_wav(in_path)
     
-    fft_res = e.process_pcm_samples()
+    ns,freqs = e.process_pcm_samples()
 
-    # Create template sequence
-    # NB! TODO count number of raw samples
-    
-    template = []
+    if e.slen - ns < 1000:
+        print('No signal found!')
+        sys.exit(1)
+
+    header_size = round(sr*0.3)*2 + round(sr*0.01)
     if intro:
-        template += [(1900,100),(1500,100),(1900,100),(1500,100),(2300,100),(1500,100),(2300,100),(1500,100)]
+        header_size += round(sr*0.1)*8
 
-    if encoding != 'FAX':
-        # Normal header
-        template += [(1900,300), (1200,10), (1900,300)]
-        # VIS
-        template += [(1200, 30)]
-        template += [(None, 30)]*8
-        template += [(1200, 30)]
-        # Parse VIS and verify encoding mode, check parity bit
-        # Set up sync pulse timings to follow
-    else:
-        # FAX header
-        template += [(2300,2.05), (1500,2.05)]*1220
-        # phasing interval
-        template += []
+    vis_size = round(sr*0.03)*10
 
-    # Martin M1
-    for y in range(256):
-        template += [(1200,4.862)]
-        template += [(1500,0.572)]
-        for j in range(3):
-            for x in range(320):
-                template += [(None,0.4576)]
+    print(ns, header_size, vis_size)
+    for val in freqs:
+        print(val)
 
-            template += [(1500,0.572)]
-
-
-    # Process samples and match
-    recording = e.parse_samples(fft_res)
-
-    e.decode_header()
+    return
 
     if encoding != 'FAX':
         e.decode_VIS()
     else:
         e.decode_phasing_interval()
 
-    lines = e.decode_image(template, recording)
+    # lines = e.decode_image(template, recording)
 
     e.__del__()
     if not wave and not f.closed:
@@ -186,7 +151,6 @@ if __name__ == '__main__':
     in_path = None
     out_path = None
     encoding = None
-    iformat = 'PNG'
     mode = None
     sr = 44100
     wav = True
@@ -200,8 +164,6 @@ if __name__ == '__main__':
             out_path = args[args.index(arg)+1]
         elif arg == '--encoding':
             encoding = args[args.index(arg)+1]
-        elif arg == '--format':
-            iformat = args[args.index(arg)+1]
         elif arg == '--mode':
             mode = args[args.index(arg)+1]
         elif arg == '--sr':
@@ -229,7 +191,7 @@ if __name__ == '__main__':
 
         elif func == '--decode':
             logger.info(f'Decoding {in_path}...')
-            if decode(in_path, out_path, iformat, sr, wav, encoding, mode, intro):
+            if decode(in_path, out_path, sr, wav, encoding, mode, intro):
                 logger.info(f'Wrote output to {out_path}')
 
     logger.info('Done.')

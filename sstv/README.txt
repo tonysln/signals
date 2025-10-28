@@ -63,7 +63,7 @@ Optional tools
 
 
 Usage
-	If running for the first time, execute build.sh to generate libfft.so and libimg.so. 
+	If running for the first time, execute ../build.sh to generate libfft.so and libimg.so. 
 	These simple libraries are used to read & write images and to run FFT on audio.
 	
 	Encode:

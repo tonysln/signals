@@ -38,12 +38,13 @@ class Decoder():
         85: (FAXEncoder, 'FAX480')
     }
 
-    def __init__(self, f, iformat, encoding, mode, samp_rate=44100):
+    def __init__(self, f, encoding, mode, samp_rate=44100):
         self.file = f
         self.sr = samp_rate
         self.encoding = encoding
         self.mode = mode
         self.pcm_samples = []
+        self.slen = 0
 
         self.load_libfft()
 
@@ -87,38 +88,37 @@ class Decoder():
                 i += n
 
             # print(f'final i={i}/{flen}')
+
+        self.slen = len(self.pcm_samples)
     
 
-    def find_window_peak(self, fbins, win, N):
+    def find_window_peak(self, win, N):
         # Select peak in current window
-        b = [None, 1e-10, None]
+        b = [1e-10, None]
         for j,m in enumerate(win):
-            if m > b[1]:
-                b = fbins[j],m,j
+            if m > b[0]:
+                b = m,j
 
-        nf,c = self.interpolate_mag(win, b[2], N)
-        return nf,c
+        if b[1]:
+            return self.interpolate_mag(win, b[1], N)
+        
+        return -1,-1
 
 
-    def process_pcm_samples(self, N=1024, hop=512):
+    def process_pcm_samples(self, N=512, hop=128):
         logger.info('Processing PCM stream...')
-
-        fbins = [j * self.sr / N for j in range(0, N//2)]
 
         DoubleArray = c_double * N
         hann = DoubleArray(*[0.0]*N)
         self.lib.hann(hann, N)
+        nonsil = 0
+        prev_pwr = 0
 
-        slen = len(self.pcm_samples)
-
-        # TODO:
-        # template idea but based on estimated number of samples for each section
-
+        out = []
 
         i = 0
-        fmax = []
-        while i < slen:
-            n = min(N, slen-i)
+        while i < self.slen:
+            n = min(N, self.slen-i)
 
             slce = self.pcm_samples[i:i+n]
             while len(slce) < N:
@@ -133,16 +133,18 @@ class Decoder():
             mag = DoubleArray(*[0.0]*N)
             pwr = self.lib.fft_mag_pwr(real, imag, mag, N)
 
-            self.lib.mag_log(mag, N)
-            nf,c = self.find_window_peak(fbins, mag, N)
-            fmax.append((i*1000/self.sr,nf))
+            if not nonsil and pwr > prev_pwr*2:
+                nonsil = i
+                print('starting at=', i)
+            else:
+                self.lib.mag_log(mag, N)
+                nf,c = self.find_window_peak(mag, N)
+                out.append((i,nf))
 
-            # print(f'win={n}, i={i}/{slen}')
-            i += min(hop, slen-i)
+            prev_pwr = pwr
+            i += min(hop, self.slen-i)
 
-        # print(f'final i={i}/{slen}')
-
-        return fmax
+        return nonsil,out
 
 
     def interpolate_mag(self, mags, ind, N):
@@ -188,7 +190,7 @@ class Decoder():
         return recording
 
 
-    def decode_header(self, has_vox):
+    def decode_header(self, header, has_vox):
         pass
 
 
