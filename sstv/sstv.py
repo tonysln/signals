@@ -96,7 +96,7 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
     if wave:
         e.read_wav(in_path)
     
-    ns,freqs = e.process_pcm_samples()
+    ns,freqs = e.process_pcm_samples2()
 
     if e.slen - ns < 1000:
         print('No signal found!')

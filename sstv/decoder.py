@@ -3,7 +3,7 @@ import wave
 import struct
 import math
 from encoder import *
-from ctypes import POINTER, c_double, c_int
+from ctypes import POINTER, c_double, c_int, c_int32
 import logging
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,8 @@ class Decoder():
 
     def load_libfft(self):
         lib = ctypes.CDLL('../lib/libfft.so')
+        lib.goertzel.argtypes = [POINTER(c_double), c_double, c_double, c_int]
+        lib.goertzel.restype = c_int32
         lib.fft.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
         lib.fft.restype = None
         lib.ifft.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
@@ -145,6 +147,38 @@ class Decoder():
             i += min(hop, self.slen-i)
 
         return nonsil,out
+
+
+    def process_pcm_samples2(self, N=500, hop=250):
+        DoubleArray = c_double * N
+        hann = DoubleArray(*[0.0]*N)
+        self.lib.hann(hann, N)
+        out = []
+
+        i = 0
+        while i < self.slen:
+            n = min(N, self.slen-i)
+
+            slce = self.pcm_samples[i:i+n]
+            while len(slce) < N:
+                slce.append(0.0)
+
+            real = DoubleArray(*slce)
+
+            # idea:
+            self.lib.filter(real, hann, N)
+            g = [self.lib.goertzel(real, 1100.0, self.sr, N), \
+                self.lib.goertzel(real, 1200.0, self.sr, N), \
+                self.lib.goertzel(real, 1300.0, self.sr, N), \
+                self.lib.goertzel(real, 1500.0, self.sr, N), \
+                self.lib.goertzel(real, 1900.0, self.sr, N), \
+                self.lib.goertzel(real, 2300.0, self.sr, N)]
+            m = [1100, 1200, 1300, 1500, 1900, 2300][g.index(max(g))]
+            out.append((i,m))
+
+            i += min(hop, self.slen-i)
+
+        return 0,out
 
 
     def interpolate_mag(self, mags, ind, N):

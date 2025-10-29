@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <float.h>
+#include "goertzel.c"
 
 
 void fft(double *real, double *imag, int n) {
