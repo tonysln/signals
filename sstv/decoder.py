@@ -85,14 +85,10 @@ class Decoder():
                 n = min(chunk_size, flen-i)
                 raw = f.readframes(n)
                 self.pcm_samples.extend(struct.unpack("<" + "h"*n, raw))
-
-                # print(f'read={n}, i={i}/{flen-i}')
                 i += n
 
-            # print(f'final i={i}/{flen}')
-
         self.slen = len(self.pcm_samples)
-    
+
 
     def find_window_peak(self, win, N):
         # Select peak in current window
@@ -135,7 +131,7 @@ class Decoder():
             mag = DoubleArray(*[0.0]*N)
             pwr = self.lib.fft_mag_pwr(real, imag, mag, N)
 
-            if not nonsil and pwr > prev_pwr*2:
+            if not nonsil and pwr > prev_pwr and i > 0:
                 nonsil = i
                 print('starting at=', i)
             else:
@@ -149,11 +145,12 @@ class Decoder():
         return nonsil,out
 
 
-    def process_pcm_samples2(self, N=500, hop=250):
+    def find_nonsil(self, N=32, hop=16):
+        # Cheaper way to find first non-silence samples
+
         DoubleArray = c_double * N
         hann = DoubleArray(*[0.0]*N)
         self.lib.hann(hann, N)
-        out = []
 
         i = 0
         while i < self.slen:
@@ -164,21 +161,46 @@ class Decoder():
                 slce.append(0.0)
 
             real = DoubleArray(*slce)
-
-            # idea:
             self.lib.filter(real, hann, N)
-            g = [self.lib.goertzel(real, 1100.0, self.sr, N), \
-                self.lib.goertzel(real, 1200.0, self.sr, N), \
-                self.lib.goertzel(real, 1300.0, self.sr, N), \
-                self.lib.goertzel(real, 1500.0, self.sr, N), \
-                self.lib.goertzel(real, 1900.0, self.sr, N), \
-                self.lib.goertzel(real, 2300.0, self.sr, N)]
-            m = [1100, 1200, 1300, 1500, 1900, 2300][g.index(max(g))]
-            out.append((i,m))
+            if self.lib.goertzel(real, 1900, self.sr, N):
+                if i - N > 0:
+                    i -= N
+                return i
 
             i += min(hop, self.slen-i)
 
-        return 0,out
+        return i
+
+
+    def process_header(self, start, elen, N=64, hop=32):
+        DoubleArray = c_double * N
+        hann = DoubleArray(*[0.0]*N)
+        self.lib.hann(hann, N)
+        out = []
+
+        i = start
+        while i < start+elen:
+            n = min(N, start+elen-i)
+
+            slce = self.pcm_samples[i:i+n]
+            while len(slce) < N:
+                slce.append(0.0)
+
+            real = DoubleArray(*slce)
+            self.lib.filter(real, hann, N)
+            freqs = [1100, 1200, 1300, 1500, 1900, 2300]
+            g = [self.lib.goertzel(real, float(f), self.sr, N) for f in freqs]
+            mg = max(g)
+            m = freqs[g.index(mg)]
+            out.append((i,m,mg))
+
+            i += min(hop, start+elen-i)
+
+        return i,out
+
+
+    def process_image(self, N=128, hop=64):
+        pass
 
 
     def interpolate_mag(self, mags, ind, N):
@@ -222,10 +244,6 @@ class Decoder():
             prev_f = ff
 
         return recording
-
-
-    def decode_header(self, header, has_vox):
-        pass
 
 
     def decode_VIS(self, vis_raw, parity_raw):

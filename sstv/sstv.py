@@ -95,29 +95,67 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
 
     if wave:
         e.read_wav(in_path)
-    
-    ns,freqs = e.process_pcm_samples2()
-
-    if e.slen - ns < 1000:
-        print('No signal found!')
-        sys.exit(1)
 
     header_size = round(sr*0.3)*2 + round(sr*0.01)
-    if intro:
-        header_size += round(sr*0.1)*8
-
+    fax_head_size = round(sr*0.00205)*2*1220
+    intro_size = round(sr*0.1)*8
     vis_size = round(sr*0.03)*10
+    fax_phint_size = (round(sr*0.00512) + round(sr*0.000512*512))*20
 
-    print(ns, header_size, vis_size)
-    for val in freqs:
-        print(val)
-
-    return
-
+    elen = 0
     if encoding != 'FAX':
-        e.decode_VIS()
+        elen += header_size + vis_size
     else:
-        e.decode_phasing_interval()
+        elen += fax_head_size + fax_phint_size
+
+    if intro:
+        elen += intro_size
+
+    ns = e.find_nonsil()
+    # ns,out = e.process_pcm_samples()
+    print('expected len', elen, ns)
+    i,freqs = e.process_header(ns, elen)
+    j = ns
+    start = j
+    jf = 0
+    if intro:
+        print(f'intro until {start+intro_size}:')
+        while j < start+intro_size:
+            print(freqs[jf])
+            j = freqs[jf][0]
+            jf += 1
+
+
+    start = j
+    if encoding != 'FAX':
+        # e.decode_VIS()
+        print(f'header until {start+header_size}:')
+        while j < start+header_size:
+            print(freqs[jf])
+            j = freqs[jf][0]
+            jf += 1
+
+        start = j
+        print(f'VIS until {start+vis_size}:')
+        while j < start+vis_size:
+            print(freqs[jf])
+            j = freqs[jf][0]
+            jf += 1
+
+    else:
+        # e.decode_phasing_interval()
+        print(f'FAX header until {start+fax_head_size}:')
+        while j < start+fax_head_size:
+            print(freqs[jf])
+            j = freqs[jf][0]
+            jf += 1
+
+        start = j
+        print(f'FAX phasing interval until {start+fax_phint_size}:')
+        while j < start+fax_phint_size:
+            print(freqs[jf])
+            j = freqs[jf][0]
+            jf += 1
 
     # lines = e.decode_image(template, recording)
 
