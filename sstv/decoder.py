@@ -103,18 +103,17 @@ class Decoder():
         return -1,-1
 
 
-    def process_pcm_samples(self, N=512, hop=128):
+    def process_image(self, start, N=64, hop=32):
         logger.info('Processing PCM stream...')
 
         DoubleArray = c_double * N
         hann = DoubleArray(*[0.0]*N)
         self.lib.hann(hann, N)
-        nonsil = 0
+        nonsil = start
         prev_pwr = 0
 
         out = []
-
-        i = 0
+        i = start
         while i < self.slen:
             n = min(N, self.slen-i)
 
@@ -199,9 +198,6 @@ class Decoder():
         return i,out
 
 
-    def process_image(self, N=128, hop=64):
-        pass
-
 
     def interpolate_mag(self, mags, ind, N):
         # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
@@ -246,14 +242,17 @@ class Decoder():
         return recording
 
 
-    def decode_VIS(self, vis_raw, parity_raw):
+    def decode_VIS(self, i):
+        vis_raw = []
+        parity_raw = []
+
         vis = self.bin_to_dec_lsb(vis_raw)
         parity = [1,0][sum(vis_raw) % 2 == 0]
 
-        assert parity == parity_raw
-        assert vis in self.modes
+        if parity == parity_raw and vis in self.modes:
+            return i,self.modes[vis]
 
-        return self.modes[vis]
+        return i,None
 
 
     def bin_to_dec_lsb(self, bits_list, n=0x40):
@@ -264,51 +263,32 @@ class Decoder():
         return res
 
 
-    def decode_phasing_interval(self):
-        pass
+    def decode_phasing_interval(self, i):
+        return i,None
 
 
     def hz_to_rgb(self, freq):
         return max(0, min(255, int(round((freq-1500.0) / 3.1372549))))
 
 
-    def decode_image(self, template, recording):
-        i = 0
-        j = 0
-        vis = ''
-        parity = None
-        state = -2
-        lines = []
-        gbr = [[], [], []]
-        while i < len(template) and j < len(recording):
-            t_f,t_ms = template[i]
-            r_f,r_ms = recording[j]
+    def decode_image(self, encoder, freqs):
+        pixels = []
+        for freq in freqs:
+            # sync pulses
+            # ...
 
-            if abs(t_ms-r_ms) < 21:
-                if i > 11 and i < 19:
-                    vis = ('1' if r_f == 1100 else '0') + vis
-                elif i == 19:
-                    parity = r_f == 1300
-                elif i == 20:
-                    print('VIS:', vis, int(vis, 2))
-                    print('parity:', parity, (vis.count('1')%2 == 0) == parity)
-                elif i > 21:
-                    if t_f == 1200 or t_f == 1500:
-                        state += 1
+            pixels.append(self.hz_to_rgb(freq[1]))
 
-                    if state > 2:
-                        state = -2
-                        lines.append(gbr)
-                        gbr = [[], [], []]
-                    else:
-                        color = self.hz_to_rgb(r_f)
-                        gbr[state].append(int(color))
+        return pixels
 
-            i += 1
-            j += 1
 
-        return lines
- 
+    def decode_vox(self, i):
+        return i,None
+
+
+    def decode_header(self, i, is_fax):
+        return i,None
+
 
     def __del__(self):
         self.file.close()

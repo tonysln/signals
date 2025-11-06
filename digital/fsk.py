@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import sys
+import ctypes
+from ctypes import POINTER, c_double, c_int, c_int32
 import logging
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,17 @@ class FSKEncoder():
 class FSKDecoder():
 	def __init__(self):
 		pass
+
+
+    def load_libfft(self):
+        lib = ctypes.CDLL('../lib/libfft.so')
+        lib.goertzel.argtypes = [POINTER(c_double), c_double, c_double, c_int]
+        lib.goertzel.restype = c_int32
+        # lib.hann.argtypes = [POINTER(c_double), c_int]
+        # lib.hann.restype = None
+        # lib.filter.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
+        # lib.filter.restype = None
+        self.lib = lib
 
 
 	def decode(self):

@@ -112,52 +112,32 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
         elen += intro_size
 
     ns = e.find_nonsil()
-    # ns,out = e.process_pcm_samples()
     print('expected len', elen, ns)
     i,freqs = e.process_header(ns, elen)
-    j = ns
-    start = j
-    jf = 0
+
+    vox = None
+    header = None
+    vis = None
+    phint = None
     if intro:
-        print(f'intro until {start+intro_size}:')
-        while j < start+intro_size:
-            print(freqs[jf])
-            j = freqs[jf][0]
-            jf += 1
+        i,vox = e.decode_vox(i)
 
+    i,header = e.decode_header(i, encoding == 'FAX')
 
-    start = j
     if encoding != 'FAX':
-        # e.decode_VIS()
-        print(f'header until {start+header_size}:')
-        while j < start+header_size:
-            print(freqs[jf])
-            j = freqs[jf][0]
-            jf += 1
-
-        start = j
-        print(f'VIS until {start+vis_size}:')
-        while j < start+vis_size:
-            print(freqs[jf])
-            j = freqs[jf][0]
-            jf += 1
-
+        i,vis = e.decode_VIS(i)
     else:
-        # e.decode_phasing_interval()
-        print(f'FAX header until {start+fax_head_size}:')
-        while j < start+fax_head_size:
-            print(freqs[jf])
-            j = freqs[jf][0]
-            jf += 1
+        i,phint = e.decode_phasing_interval(i)
 
-        start = j
-        print(f'FAX phasing interval until {start+fax_phint_size}:')
-        while j < start+fax_phint_size:
-            print(freqs[jf])
-            j = freqs[jf][0]
-            jf += 1
+    print('i=',i)
+    print('vox/header/VIS/phint:')
+    print(vox, header, vis, phint)
 
-    # lines = e.decode_image(template, recording)
+    print('IMAGE:')
+    nns,imgfreqs = e.process_image(i)
+    pixels = e.decode_image(None, imgfreqs)
+    for p in pixels:
+        print(p)
 
     e.__del__()
     if not wave and not f.closed:
