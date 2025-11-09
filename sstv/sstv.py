@@ -113,29 +113,45 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
 
     ns = e.find_nonsil()
     print('expected len', elen, ns)
-    i,freqs = e.process_header(ns, elen)
+    i,data = e.process_header(ns, elen)
+    freqs = []
+    for i in range(len(data)-1):
+        x0,y0 = data[i]
+        for t in range(x0, data[i+1][0]):
+            freqs.append(y0)
+
+    freqs.append(data[-1][1])
 
     vox = None
     header = None
     vis = None
     phint = None
+    j = ns
     if intro:
-        i,vox = e.decode_vox(i)
+        j,vox = e.decode_vox(j, freqs)
 
-    i,header = e.decode_header(i, encoding == 'FAX')
+    j,header = e.decode_header(j, freqs, encoding == 'FAX')
 
     if encoding != 'FAX':
-        i,vis = e.decode_VIS(i)
+        j,vis = e.decode_VIS(j, freqs)
     else:
-        i,phint = e.decode_phasing_interval(i)
+        j,phint = e.decode_phasing_interval(j, freqs)
 
     print('i=',i)
     print('vox/header/VIS/phint:')
     print(vox, header, vis, phint)
 
     print('IMAGE:')
-    nns,imgfreqs = e.process_image(i)
-    pixels = e.decode_image(None, imgfreqs)
+    nns,data2 = e.process_image(i)
+    imgfreqs = []
+    for i in range(len(data2)-1):
+        x0,y0 = data2[i]
+        for t in range(x0, data2[i+1][0]):
+            imgfreqs.append(y0)
+
+    imgfreqs.append(data[-1][1])
+    print(len(imgfreqs))
+    pixels = e.decode_image(None, j, imgfreqs)
     for p in pixels:
         print(p)
 

@@ -2,6 +2,7 @@ import ctypes
 import wave
 import struct
 import math
+import statistics
 from encoder import *
 from ctypes import POINTER, c_double, c_int, c_int32
 import logging
@@ -191,7 +192,7 @@ class Decoder():
             g = [self.lib.goertzel(real, float(f), self.sr, N) for f in freqs]
             mg = max(g)
             m = freqs[g.index(mg)]
-            out.append((i,m,mg))
+            out.append((i,m))
 
             i += min(hop, start+elen-i)
 
@@ -242,9 +243,17 @@ class Decoder():
         return recording
 
 
-    def decode_VIS(self, i):
-        vis_raw = []
-        parity_raw = []
+    def decode_VIS(self, start, freqs):
+        step = int(round(self.sr*0.03))
+        bits = []
+
+        for i in range(start, start+step*10, step):
+            bits.append(statistics.mode(freqs[i:i+step]))
+
+        vis_raw = bits[1:8]
+        parity_raw = bits[9]
+
+        print(bits)
 
         vis = self.bin_to_dec_lsb(vis_raw)
         parity = [1,0][sum(vis_raw) % 2 == 0]
@@ -252,7 +261,7 @@ class Decoder():
         if parity == parity_raw and vis in self.modes:
             return i,self.modes[vis]
 
-        return i,None
+        return i,bits
 
 
     def bin_to_dec_lsb(self, bits_list, n=0x40):
@@ -271,23 +280,64 @@ class Decoder():
         return max(0, min(255, int(round((freq-1500.0) / 3.1372549))))
 
 
-    def decode_image(self, encoder, freqs):
+    def decode_image(self, encoder, start, freqs):
         pixels = []
-        for freq in freqs:
-            # sync pulses
-            # ...
 
-            pixels.append(self.hz_to_rgb(freq[1]))
+        # Martin M1 example
+        sync = int(round(self.sr * 4.862))
+        t1 = int(round(self.sr * 0.572))
+        pixel = int(round(self.sr * 0.4576))
+        w = 320
+        h = 256
+        line = 3*(t1 + pixel*w)
+        fline = sync + t1 + line
+        full = h * line
+
+        for i in range(0, full, fline):
+            lp = []
+            # TODO search around for sync+t1
+            i += sync + t1
+
+            for _ in range(3):
+                for j in range(0, pixel*w, pixel):
+                    lp.append(self.hz_to_rgb(freqs[j+i]))
+                
+                i += t1
+            
+            print(lp)
+            pixels.append(lp)
 
         return pixels
 
 
-    def decode_vox(self, i):
-        return i,None
+    def decode_vox(self, start, freqs):
+        bits = []
+        step = int(round(self.sr*0.1))
+        for i in range(start, start+step*8, step):
+            bits.append(statistics.mode(freqs[i:i+step]))
+
+        return i,bits
 
 
-    def decode_header(self, i, is_fax):
-        return i,None
+    def decode_header(self, start, freqs, is_fax):
+        bits = []
+        i = start
+
+        if is_fax:
+            step = int(round(self.sr*0.00205))
+            
+            for j in range(1220*2):
+                bits.append(statistics.mode(freqs[i:i+step]))
+                i += step
+        else:
+            step1 = int(round(self.sr*0.3))
+            step2 = int(round(self.sr*0.01))
+
+            for s in [step1, step2, step1]:
+                bits.append(statistics.mode(freqs[i:i+s]))
+                i += s
+
+        return i,bits
 
 
     def __del__(self):
