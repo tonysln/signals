@@ -104,7 +104,7 @@ class Decoder():
         return -1,-1
 
 
-    def process_image(self, start, N=64, hop=32):
+    def process_image(self, start, elen=None, N=512, hop=128):
         logger.info('Processing PCM stream...')
 
         DoubleArray = c_double * N
@@ -115,7 +115,8 @@ class Decoder():
 
         out = []
         i = start
-        while i < self.slen:
+        end = elen if elen else self.slen
+        while i < end:
             n = min(N, self.slen-i)
 
             slce = self.pcm_samples[i:i+n]
@@ -137,6 +138,9 @@ class Decoder():
             else:
                 self.lib.mag_log(mag, N)
                 nf,c = self.find_window_peak(mag, N)
+                if nf > 3000:
+                    nf = abs(nf - self.sr)
+
                 out.append((i,nf))
 
             prev_pwr = pwr
@@ -244,16 +248,34 @@ class Decoder():
 
 
     def decode_VIS(self, start, freqs):
-        step = int(round(self.sr*0.03))
+        step = int(math.ceil(self.sr*0.03))
         bits = []
+        i = start
+        sb = 0
 
-        for i in range(start, start+step*10, step):
-            bits.append(statistics.mode(freqs[i:i+step]))
+        while len(bits) < 8 and i < len(freqs)-step:
+            win = [round(f, -1) for f in freqs[i:i+step]]
+            bit = int(statistics.mode(win))
+            
+            if sb > 1:
+                break
 
-        vis_raw = bits[1:8]
-        parity_raw = bits[9]
+            if sb > 0:
+                bits.append(bit)
 
-        print(bits)
+            if abs(1200 - bit) < 50:
+                sb += 1
+
+            i += step
+
+        if len(bits) != 8:
+            return i,None
+
+        m = {1100: 1, 1300: 0}
+        vis_raw = [m[b] for b in bits[0:7]]
+        parity_raw = m[bits[7]]
+
+        print(vis_raw, parity_raw)
 
         vis = self.bin_to_dec_lsb(vis_raw)
         parity = [1,0][sum(vis_raw) % 2 == 0]
@@ -280,41 +302,67 @@ class Decoder():
         return max(0, min(255, int(round((freq-1500.0) / 3.1372549))))
 
 
-    def decode_image(self, encoder, start, freqs):
+    def decode_image(self, encoder, mode, start, freqs):
         pixels = []
 
         # Martin M1 example
+        em = encoder.opts[mode]
         sync = int(round(self.sr * 4.862))
+        sf = 1200
         t1 = int(round(self.sr * 0.572))
-        pixel = int(round(self.sr * 0.4576))
-        w = 320
-        h = 256
+        t1f = 1500
+        pixel = int(round(self.sr * em['t_pixel']))
+        h = em['height']
+        w = em['width']
         line = 3*(t1 + pixel*w)
         fline = sync + t1 + line
         full = h * line
 
-        for i in range(0, full, fline):
+        i = start
+        while i < len(freqs):
             lp = []
-            # TODO search around for sync+t1
-            i += sync + t1
+            print('>',i)
+            
+            # sync
+            bit = 100
+            while abs(bit-sf) > 100 and i < len(freqs):
+                win = [round(f, -1) for f in freqs[i:i+sync]]
+                bit = statistics.mode(win)
+                i += sync
+
+            # T1
+            bit = 100
+            while abs(bit-t1f) > 100 and i < len(freqs):
+                win = [round(f, -1) for f in freqs[i:i+t1]]
+                bit = statistics.mode(win)
+                i += t1
+
+            print('sync done',i)
 
             for _ in range(3):
-                for j in range(0, pixel*w, pixel):
-                    lp.append(self.hz_to_rgb(freqs[j+i]))
+                for j in range(0, w):
+                    lp.append(self.hz_to_rgb(statistics.mode(freqs[i:i+pixel])))
+                    i += pixel
                 
-                i += t1
+                bit = 100
+                while abs(bit-t1f) > 100 and i < len(freqs):
+                    win = [round(f, -1) for f in freqs[i:i+t1]]
+                    bit = statistics.mode(win)
+                    i += t1
             
             print(lp)
             pixels.append(lp)
+            print('line done',i)
 
         return pixels
 
 
     def decode_vox(self, start, freqs):
         bits = []
-        step = int(round(self.sr*0.1))
+        step = int(math.ceil(self.sr*0.1))
         for i in range(start, start+step*8, step):
-            bits.append(statistics.mode(freqs[i:i+step]))
+            win = [round(f, -1) for f in freqs[i:i+step]]
+            bits.append(statistics.mode(win))
 
         return i,bits
 
@@ -325,16 +373,33 @@ class Decoder():
 
         if is_fax:
             step = int(round(self.sr*0.00205))
+            steps = [(2300,step), (1500,step)]
+            sidx = False
             
-            for j in range(1220*2):
-                bits.append(statistics.mode(freqs[i:i+step]))
-                i += step
-        else:
-            step1 = int(round(self.sr*0.3))
-            step2 = int(round(self.sr*0.01))
+            while len(bits) < 1220*2 and i < len(freqs):
+                sf,s = steps[sidx]
+                win = [math.ceil(f, -1) for f in freqs[i:i+s]]
+                bit = statistics.mode(win)
+                if bit == sf:
+                    sidx = not sidx
+                    bits.append(bit)
 
-            for s in [step1, step2, step1]:
-                bits.append(statistics.mode(freqs[i:i+s]))
+                i += s
+
+        else:
+            step1 = (1900,int(math.ceil(self.sr*0.3)))
+            step2 = (1200,int(math.ceil(self.sr*0.01)))
+            steps = [step1,step2,step1]
+            sidx = 0
+
+            while len(bits) < 3 and i < len(freqs) and sidx < len(steps):
+                sf,s = steps[sidx]
+                win = [round(f, -1) for f in freqs[i:i+s]]
+                bit = statistics.mode(win)
+                if bit == sf:
+                    sidx += 1
+                    bits.append(bit)
+
                 i += s
 
         return i,bits

@@ -113,7 +113,9 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
 
     ns = e.find_nonsil()
     print('expected len', elen, ns)
-    i,data = e.process_header(ns, elen)
+    # i,data = e.process_header(ns, elen)
+    ns,data = e.process_image(ns, elen)
+    # print(data[:100])
     freqs = []
     for i in range(len(data)-1):
         x0,y0 = data[i]
@@ -125,6 +127,8 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
     vox = None
     header = None
     vis = None
+    d_enc = None
+    d_mode = None
     phint = None
     j = ns
     if intro:
@@ -137,12 +141,16 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
     else:
         j,phint = e.decode_phasing_interval(j, freqs)
 
-    print('i=',i)
+    print('j=',j)
     print('vox/header/VIS/phint:')
     print(vox, header, vis, phint)
 
+    if vis:
+        d_enc,d_mode = vis
+        print('Detected encode and mode:',d_enc,d_mode)
+
     print('IMAGE:')
-    nns,data2 = e.process_image(i)
+    nns,data2 = e.process_image(j)
     imgfreqs = []
     for i in range(len(data2)-1):
         x0,y0 = data2[i]
@@ -150,8 +158,8 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
             imgfreqs.append(y0)
 
     imgfreqs.append(data[-1][1])
-    print(len(imgfreqs))
-    pixels = e.decode_image(None, j, imgfreqs)
+    print(len(imgfreqs), imgfreqs[:100])
+    pixels = e.decode_image(d_enc, d_mode, j, imgfreqs)
     for p in pixels:
         print(p)
 
