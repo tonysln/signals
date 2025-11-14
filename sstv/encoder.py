@@ -22,15 +22,14 @@ class Encoder:
         self.lum_b_hz = 1500
 
         self.intro_tone_hz = [1900, 1500, 1900, 1500, 2300, 1500, 2300, 1500]
-        self.intro_tone_ms = 100
+        self.intro_tone_ms = 0.1
 
         if self.file and self.wav:
             logger.info("Writing output as WAV")
             self.file.setparams((1, 2, self.SR, 0, "NONE", "Uncompressed"))
 
     def generate_tone(self, f_hz, t_ms):
-        t_s = t_ms / 1000.0
-        self.clock += t_s
+        self.clock += t_ms
 
         # Closest sample we should use without cutting
         end_sample = round(self.clock * self.SR)
@@ -63,6 +62,10 @@ class Encoder:
             w = self.enc["width"]
             self.encode_line(data[y * w * 3 : (y + 1) * w * 3])
 
+    def encode_line(self, line):
+        # To be overriden
+        return
+
     def generate_intro(self):
         logger.info("Generating VOX intro code...")
         for hz in self.intro_tone_hz:
@@ -70,23 +73,23 @@ class Encoder:
 
     def generate_header(self):
         logger.info("Generating header...")
-        self.generate_tone(f_hz=1900, t_ms=300)
-        self.generate_tone(f_hz=1200, t_ms=10)
-        self.generate_tone(f_hz=1900, t_ms=300)
+        self.generate_tone(f_hz=1900, t_ms=0.3)
+        self.generate_tone(f_hz=1200, t_ms=0.01)
+        self.generate_tone(f_hz=1900, t_ms=0.3)
 
     def generate_VIS(self):
         logger.info("Generating VIS code...")
-        self.generate_tone(f_hz=1200, t_ms=30)  # start bit
+        self.generate_tone(f_hz=1200, t_ms=0.03)  # start bit
 
         vis_bits = self.dec_to_bin_lsb(self.enc["vis"])
         for bit in vis_bits:  # LSB, 7 data
             hz = [1300, 1100][bit]
-            self.generate_tone(f_hz=hz, t_ms=30)
+            self.generate_tone(f_hz=hz, t_ms=0.03)
 
         even_parity = sum(vis_bits) % 2 == 0
         hz = [1100, 1300][even_parity]
-        self.generate_tone(f_hz=hz, t_ms=30)  # parity bit
-        self.generate_tone(f_hz=1200, t_ms=30)  # stop bit
+        self.generate_tone(f_hz=hz, t_ms=0.03)  # parity bit
+        self.generate_tone(f_hz=1200, t_ms=0.03)  # stop bit
 
     @lru_cache(maxsize=4096)
     def rgb_to_y(self, R, G, B):
@@ -110,10 +113,10 @@ class Encoder:
 
 class MartinEncoder(Encoder):
     opts = {
-        "M1": {"t_pixel": 0.4576, "vis": 44, "width": 320, "height": 256},
-        "M2": {"t_pixel": 0.2288, "vis": 40, "width": 320, "height": 256},
-        "M3": {"t_pixel": 0.4576, "vis": 36, "width": 320, "height": 128},
-        "M4": {"t_pixel": 0.2288, "vis": 32, "width": 320, "height": 128},
+        "M1": {"t_pixel": 0.0004576, "vis": 44, "width": 320, "height": 256},
+        "M2": {"t_pixel": 0.0002288, "vis": 40, "width": 320, "height": 256},
+        "M3": {"t_pixel": 0.0004576, "vis": 36, "width": 320, "height": 128},
+        "M4": {"t_pixel": 0.0002288, "vis": 32, "width": 320, "height": 128},
     }
 
     def __init__(self, f=None, wav=True, mode="M1", sr=44100):
@@ -124,9 +127,9 @@ class MartinEncoder(Encoder):
         logger.info(f"Using MartinEncoder with mode {mode}")
 
         self.sync_hz = 1200
-        self.sync_ms = 4.862
+        self.sync_ms = 0.004862
         self.t1_hz = 1500
-        self.t1_ms = 0.572
+        self.t1_ms = 0.000572
 
     def encode_line(self, line):
         self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
@@ -140,23 +143,23 @@ class MartinEncoder(Encoder):
             self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
 
     def decode_sequence(self, sr):
-        yield int(round(sr * 0.004862)), 10
-        yield int(round(sr * 0.000572)), 11
+        yield int(round(sr * self.sync_ms)), 10
+        yield int(round(sr * self.t1_ms)), 11
 
         for j in [1, 2, 0]:
             for _ in range(0, self.enc["width"]):
-                yield int(round(sr * (self.enc["t_pixel"] / 1000.0))), j
+                yield int(round(sr * self.enc["t_pixel"])), j
 
-            yield int(round(sr * 0.000572)), 11
+            yield int(round(sr * self.t1_ms)), 11
 
 
 class ScottieEncoder(Encoder):
     opts = {
-        "S1": {"t_pixel": 0.4320, "vis": 60, "width": 320, "height": 256},
-        "S2": {"t_pixel": 0.2752, "vis": 56, "width": 320, "height": 256},
-        "S3": {"t_pixel": 0.4320, "vis": 52, "width": 320, "height": 128},
-        "S4": {"t_pixel": 0.2752, "vis": 48, "width": 320, "height": 128},
-        "DX": {"t_pixel": 1.0800, "vis": 76, "width": 320, "height": 256},
+        "S1": {"t_pixel": 0.000432, "vis": 60, "width": 320, "height": 256},
+        "S2": {"t_pixel": 0.0002752, "vis": 56, "width": 320, "height": 256},
+        "S3": {"t_pixel": 0.000432, "vis": 52, "width": 320, "height": 128},
+        "S4": {"t_pixel": 0.0002752, "vis": 48, "width": 320, "height": 128},
+        "DX": {"t_pixel": 0.00108, "vis": 76, "width": 320, "height": 256},
     }
 
     def __init__(self, f=None, wav=True, mode="S1", sr=44100):
@@ -167,9 +170,9 @@ class ScottieEncoder(Encoder):
         logger.info(f"Using ScottieEncoder with mode {mode}")
         self.first_line_done = False
         self.sync_hz = 1200
-        self.sync_ms = 9
+        self.sync_ms = 0.009
         self.t1_hz = 1500
-        self.t1_ms = 1.5
+        self.t1_ms = 0.0015
 
     def encode_line(self, line):
         if not self.first_line_done:
@@ -192,10 +195,10 @@ class ScottieEncoder(Encoder):
 
 class WrasseEncoder(Encoder):
     opts = {
-        "SC2-30": {"t_pixel": 0.18125, "vis": 51, "width": 320, "height": 128},
-        "SC2-60": {"t_pixel": 0.18125, "vis": 59, "width": 320, "height": 256},
-        "SC2-120": {"t_pixel": 0.365625, "vis": 63, "width": 320, "height": 256},
-        "SC2-180": {"t_pixel": 0.734375, "vis": 55, "width": 320, "height": 256},
+        "SC2-30": {"t_pixel": 0.00018125, "vis": 51, "width": 320, "height": 128},
+        "SC2-60": {"t_pixel": 0.00018125, "vis": 59, "width": 320, "height": 256},
+        "SC2-120": {"t_pixel": 0.000365625, "vis": 63, "width": 320, "height": 256},
+        "SC2-180": {"t_pixel": 0.000734375, "vis": 55, "width": 320, "height": 256},
     }
 
     def __init__(self, f=None, wav=True, mode="SC2-180", sr=44100):
@@ -205,9 +208,9 @@ class WrasseEncoder(Encoder):
         super().__init__(f, wav, sr)
         logger.info(f"Using WrasseEncoder with mode {mode}")
         self.sync_hz = 1200
-        self.sync_ms = 5.5225
+        self.sync_ms = 0.0055225
         self.t1_hz = 1500
-        self.t1_ms = 0.5
+        self.t1_ms = 0.0005
 
     def encode_line(self, line):
         self.generate_tone(f_hz=self.sync_hz, t_ms=self.sync_ms)
@@ -222,34 +225,34 @@ class WrasseEncoder(Encoder):
 class PasokonEncoder(Encoder):
     opts = {
         "P3": {
-            "t_pixel": 0.2083,
+            "t_pixel": 0.0002083,
             "vis": 113,
             "width": 640,
             "height": 496,
             "sync_hz": 1200,
-            "sync_ms": 5.208,
+            "sync_ms": 0.005208,
             "t1_hz": 1500,
-            "t1_ms": 1.042,
+            "t1_ms": 0.001042,
         },
         "P5": {
-            "t_pixel": 0.3125,
+            "t_pixel": 0.0003125,
             "vis": 114,
             "width": 640,
             "height": 496,
             "sync_hz": 1200,
-            "sync_ms": 7.813,
+            "sync_ms": 0.007813,
             "t1_hz": 1500,
-            "t1_ms": 1.563,
+            "t1_ms": 0.001563,
         },
         "P7": {
-            "t_pixel": 0.4167,
+            "t_pixel": 0.0004167,
             "vis": 115,
             "width": 640,
             "height": 496,
             "sync_hz": 1200,
-            "sync_ms": 10.417,
+            "sync_ms": 0.010417,
             "t1_hz": 1500,
-            "t1_ms": 2.083,
+            "t1_ms": 0.002083,
         },
     }
 
@@ -278,43 +281,43 @@ class PDEncoder(Encoder):
             "vis": 93,
             "width": 320,
             "height": 256,
-            "y_scan_ms": 0.286,
+            "y_scan_ms": 0.000286,
         },
         "PD90": {
             "vis": 99,
             "width": 320,
             "height": 256,
-            "y_scan_ms": 0.532,
+            "y_scan_ms": 0.000532,
         },
         "PD120": {
             "vis": 95,
             "width": 640,
             "height": 496,
-            "y_scan_ms": 0.19,
+            "y_scan_ms": 0.00019,
         },
         "PD160": {
             "vis": 98,
             "width": 512,
             "height": 400,
-            "y_scan_ms": 0.382,
+            "y_scan_ms": 0.000382,
         },
         "PD180": {
             "vis": 96,
             "width": 640,
             "height": 496,
-            "y_scan_ms": 0.286,
+            "y_scan_ms": 0.000286,
         },
         "PD240": {
             "vis": 97,
             "width": 640,
             "height": 496,
-            "y_scan_ms": 0.382,
+            "y_scan_ms": 0.000382,
         },
         "PD290": {
             "vis": 94,
             "width": 800,
             "height": 616,
-            "y_scan_ms": 0.286,
+            "y_scan_ms": 0.000286,
         },
     }
 
@@ -325,9 +328,9 @@ class PDEncoder(Encoder):
         super().__init__(f, wav, sr)
         logger.info(f"Using PDEncoder with mode {mode}")
         self.sync_hz = 1200
-        self.sync_ms = 20
+        self.sync_ms = 0.02
         self.t1_hz = 1500
-        self.t1_ms = 2.080
+        self.t1_ms = 0.00208
         self.odd_line = False
 
     def encode_line(self, line):
@@ -376,17 +379,17 @@ class RobotEncoder(Encoder):
             "width": 320,
             "height": 240,
             "esep_hz": 1500,
-            "y_scan_ms": 0.275,
-            "ry_scan_ms": 0.1375,
-            "by_scan_ms": 0.1375,
+            "y_scan_ms": 0.000275,
+            "ry_scan_ms": 0.0001375,
+            "by_scan_ms": 0.0001375,
         },
         "72": {
             "vis": 12,
             "width": 320,
             "height": 240,
-            "y_scan_ms": 0.43125,
-            "ry_scan_ms": 0.215625,
-            "by_scan_ms": 0.215625,
+            "y_scan_ms": 0.00043125,
+            "ry_scan_ms": 0.000215625,
+            "by_scan_ms": 0.000215625,
         },
     }
 
@@ -397,17 +400,17 @@ class RobotEncoder(Encoder):
         super().__init__(f, wav, sr)
         logger.info(f"Using RobotEncoder with mode {mode}")
         self.sync_hz = 1200
-        self.sync_ms = 9
+        self.sync_ms = 0.009
         self.t1_hz = 1500
-        self.t1_ms = 3
+        self.t1_ms = 0.003
         self.t2_hz = 1900
-        self.t2_ms = 1.5
+        self.t2_ms = 0.0015
         self.t3_hz = 1500
-        self.t3_ms = 1.5
+        self.t3_ms = 0.0015
         self.esep_hz = 1500
-        self.esep_ms = 4.5
+        self.esep_ms = 0.0045
         self.osep_hz = 2300
-        self.osep_ms = 4.5
+        self.osep_ms = 0.0045
         self.odd_line = False
 
     def encode_line(self, line):
@@ -470,7 +473,7 @@ class RobotEncoder(Encoder):
 
 
 class FAXEncoder(Encoder):
-    opts = {"FAX480": {"t_pixel": 0.512, "vis": 85, "width": 512, "height": 480}}
+    opts = {"FAX480": {"t_pixel": 0.000512, "vis": 85, "width": 512, "height": 480}}
 
     def __init__(self, f=None, wav=True, mode="FAX480", sr=44100):
         assert mode in self.opts
@@ -479,15 +482,15 @@ class FAXEncoder(Encoder):
         super().__init__(f, wav, sr)
         logger.info(f"Using FAXEncoder with mode {mode}")
         self.sync_hz = 1200
-        self.sync_ms = 5.12
+        self.sync_ms = 0.00512
         self.t1_hz = 1500
-        self.t1_ms = 0.5
+        self.t1_ms = 0.0005
 
     # @override
     def generate_header(self):
         for _ in range(1220):
-            self.generate_tone(f_hz=2300, t_ms=2.05)
-            self.generate_tone(f_hz=1500, t_ms=2.05)
+            self.generate_tone(f_hz=2300, t_ms=0.00205)
+            self.generate_tone(f_hz=1500, t_ms=0.00205)
 
     def generate_phasing_interval(self):
         for _ in range(20):

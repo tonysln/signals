@@ -336,13 +336,13 @@ class Decoder:
         i = start
 
         if is_fax:
-            step = int(round(self.sr * 0.00205))
+            step = int(math.ceil(self.sr * 0.00205))
             steps = [(2300, step), (1500, step)]
             sidx = False
 
             while len(bits) < 1220 * 2 and i < len(freqs):
                 sf, s = steps[sidx]
-                win = [math.ceil(f, -1) for f in freqs[i : i + s]]
+                win = [round(f, -1) for f in freqs[i : i + s]]
                 bit = statistics.mode(win)
                 if bit == sf:
                     sidx = not sidx

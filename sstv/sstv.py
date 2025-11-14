@@ -172,7 +172,7 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
 
     from PIL import Image
 
-    im = Image.frombytes("RGB", (320, 256), bytes(pixels))
+    im = Image.frombytes("RGB", (320, 256), bytes(imbytes))
     im.save(f)
 
     e.__del__()
