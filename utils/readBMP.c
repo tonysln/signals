@@ -22,8 +22,8 @@ typedef struct Image Image;
 systems. Originally from Windows, ported to Linux, now works on my Mac
 OS system.
 
-NOTE!! only reads 24-bit RGB, single plane, uncompressed, unencoded
-BMP, not all BMPs. BMPs saved by xv should be fine. */
+NOTE!! only reads 24-bit RGB and 32-bit RGBA (alpha is dropped), single
+plane, uncompressed, unencoded BMP, not all BMPs. BMPs saved by xv should be fine. */
 
 //
 // This code was created by Jeff Molofee '99 
@@ -67,12 +67,22 @@ unsigned short int endianReadShort(FILE* file) {
 int ImageLoad(FILE *file, Image *image) {
     unsigned long size;                 // size of the image in bytes.
     unsigned long i;                    // standard counter.
+    unsigned long offset;               // where the pixel data starts in the file.
+    unsigned long pad;                  // number of padding bytes after every row.
     unsigned short int planes;          // number of planes in image (must be 1) 
-    unsigned short int bpp;             // number of bits per pixel (must be 24)
+    unsigned short int bpp;             // number of bits per pixel (must be 24 or 32)
+    unsigned char px[4];                // one pixel as stored in the file.
     char temp;                          // temporary color storage for bgr-rgb conversion.
 
-    // seek through the bmp header, up to the width/height:
-    fseek(file, 18, SEEK_CUR);
+    // seek through the bmp header, up to the pixel data offset:
+    fseek(file, 10, SEEK_CUR);
+
+    // read the pixel data offset
+    if (!(offset = endianReadInt(file)))
+	   return -9;
+
+    // seek past the header size, up to the width/height:
+    fseek(file, 4, SEEK_CUR);
 
     // read the width
     if (!(image->sizeX = endianReadInt(file)))
@@ -96,11 +106,11 @@ int ImageLoad(FILE *file, Image *image) {
     if (!(bpp = endianReadShort(file)))
 	   return -5;
 
-    if (bpp != 24)
+    if (bpp != 24 && bpp != 32)
 	   return -6;
 	
-    // seek past the rest of the bitmap header.
-    fseek(file, 24, SEEK_CUR);
+    // seek to the pixel data, headers come in several sizes.
+    fseek(file, offset, SEEK_SET);
 
     // read the data. 
     image->data = (unsigned char *) malloc(size);
@@ -109,8 +119,22 @@ int ImageLoad(FILE *file, Image *image) {
 	   return -7;	
     }
 
-    if ((i = fread(image->data, size, 1, file)) != 1)
-	   return -8;
+    // read pixel by pixel, 32 bit ones carry a 4th byte (alpha) that is dropped.
+    // every row is padded to a multiple of 4 bytes.
+    pad = (4 - image->sizeX * (bpp / 8) % 4) % 4;
+    for (i=0; i<size; i+=3) {
+	   if (fread(px, bpp / 8, 1, file) != 1) {
+		  free(image->data);
+		  return -8;
+	   }
+
+	   image->data[i] = px[0];
+	   image->data[i+1] = px[1];
+	   image->data[i+2] = px[2];
+
+	   if ((i + 3) % (image->sizeX * 3) == 0)
+		  fseek(file, pad, SEEK_CUR);
+    }
 
     for (i=0; i<size; i+=3) { // reverse all of the colors. (bgr -> rgb)
 	   temp = image->data[i];

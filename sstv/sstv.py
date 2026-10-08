@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.WARNING)
 
 from decoder import *
 from encoder import *
-from img import load_image
+from img import LD, SV, load_image, save_image
 
 # http://lionel.cordesses.free.fr/gpages/Cordesses.pdf
 # https://web.archive.org/web/20241227121817/http://www.barberdsp.com/downloads/Dayton%20Paper.pdf
@@ -35,6 +35,11 @@ DECODERS = {"General": Decoder}
 
 def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     assert encoding in ENCODERS
+
+    ext = img_path.replace(".tmp", "").split(".")[-1].lower()
+    if ext not in LD:
+        logger.error(f"Input image format is not supported: {ext.upper()} (supported: {', '.join(LD).upper()})")
+        sys.exit(1)
 
     if wav:
         f = wave.open(out_path, "wb")
@@ -83,7 +88,9 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
 
 def decode(in_path, out_path, sr, wave, encoding, mode, intro):
     iformat = out_path.split(".")[-1].upper()
-    assert iformat in ["JPEG", "JPG", "BMP", "PNG"]
+    if iformat.lower() not in SV:
+        logger.error(f"Output image format is not supported: {iformat} (supported: {', '.join(SV).upper()})")
+        sys.exit(1)
 
     logger.info(
         f"Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}"
@@ -154,7 +161,7 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
         print("Detected encode and mode:", d_enc, d_mode)
 
     print("IMAGE:")
-    nns, data2 = e.process_image(j)
+    nns, data2 = e.process_image(j-500)
     imgfreqs = []
     for i in range(len(data2) - 1):
         x0, y0 = data2[i]
@@ -170,10 +177,7 @@ def decode(in_path, out_path, sr, wave, encoding, mode, intro):
         imbytes.extend(line)
     print(len(imbytes))
 
-    from PIL import Image
-
-    im = Image.frombytes("RGB", (320, 256), bytes(imbytes))
-    im.save(f)
+    save_image(out_path, 320, 256, bytes(imbytes))
 
     e.__del__()
     if not wave and not f.closed:
@@ -193,6 +197,10 @@ def print_help():
 
     print("\nAvailable decoders and modes:")
     print("\t...")
+
+    print("\nSupported image formats:")
+    print(f"{' ' * 4}Input (encoding): {', '.join(LD).upper()}")
+    print(f"{' ' * 4}Output (decoding): {', '.join(SV).upper()}")
 
 
 if __name__ == "__main__":

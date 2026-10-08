@@ -2,7 +2,7 @@ SSTV Encoder & Decoder
 
 
 Encoding
-	Supported input image formats: PNG, JPEG, BMP.
+	Supported input image formats: PNG, JPEG, BMP (24 and 32 bit).
 	Supported output audio formats: WAV.
 
 	Available encoders and modes:
@@ -45,7 +45,7 @@ Encoding
 
 Decoding
 	Supported input audio formats: WAV.
-	Supported output image formats: ...
+	Supported output image formats: PNG, BMP.
 
 	Under development!
 
@@ -58,12 +58,12 @@ Required tools and libraries
 	libjpeg
 
 
-Optional tools
-	ImageMagick
+Optional tools and libraries
+	ImageMagick (auto-resize in encode.sh)
 
 
 Usage
-	If running for the first time, execute ../build.sh to generate libfft.so and libimg.so. 
+	If running for the first time, execute ./build.sh in the repository root to generate libfft.so and libimg.so. 
 	These simple libraries are used to read & write images and to run FFT on audio.
 	
 	Encode:
@@ -73,7 +73,9 @@ Usage
 			./encode.sh SOURCE TARGET ENCODING MODE
 
 	Decode:
-		./sstv.py --decode SOURCE --out TARGET --format IMG_FORMAT ...
+		./sstv.py --decode SOURCE --out TARGET ...
+
+		The image format follows the TARGET file extension (.png, .bmp).
 
 	Optional arguments:
 		--vox 

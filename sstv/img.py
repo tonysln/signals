@@ -12,6 +12,10 @@ lib.load_bmp.argtypes = [c_char_p, POINTER(POINTER(c_ubyte)), POINTER(c_ulong), 
 lib.load_bmp.restype = c_int
 lib.load_jpg.argtypes = [c_char_p, POINTER(POINTER(c_ubyte)), POINTER(c_ulong), POINTER(c_ulong)]
 lib.load_jpg.restype = c_int
+lib.save_png.argtypes = [c_char_p, c_char_p, c_ulong, c_ulong]
+lib.save_png.restype = c_int
+lib.save_bmp.argtypes = [c_char_p, c_char_p, c_ulong, c_ulong]
+lib.save_bmp.restype = c_int
 lib.free_image.argtypes = [POINTER(c_ubyte)]
 lib.free_image.restype = None
 
@@ -20,6 +24,11 @@ LD = {
     'png': lib.load_png,
     'jpg': lib.load_jpg,
     'jpeg': lib.load_jpg
+}
+
+SV = {
+    'bmp': lib.save_bmp,
+    'png': lib.save_png
 }
 
 
@@ -44,6 +53,21 @@ def load_image(path):
         lib.free_image(buf)
         return (ext, w.value, h.value, memoryview(data))
 
+
+    logger.error(f'Error: provided image format is not supported: {ext.upper()}')
+    raise ValueError('Unsupported image format')
+
+
+def save_image(path, w, h, data):
+    # data: RGB bytes, top row first
+    ext = path.split('.')[-1].lower()
+
+    if ext in SV:
+        res = SV[ext](path.encode('utf-8'), data, w, h)
+        if res != 0:
+            raise RuntimeError(f"Failed to save image: error code {res}")
+
+        return
 
     logger.error(f'Error: provided image format is not supported: {ext.upper()}')
     raise ValueError('Unsupported image format')

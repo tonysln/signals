@@ -19,6 +19,7 @@
 #include <jerror.h>
 #include "readPNG.c"
 #include "readBMP.c"
+#include "writeBMP.c"
 
 
 int load_png(const char *path, unsigned char **out, unsigned long *width, unsigned long *height) {
@@ -109,8 +110,11 @@ int load_bmp(const char *path, unsigned char **out, unsigned long *width, unsign
         return -1;
 
     image = (Image *) malloc(sizeof(Image));
-    if (!ImageLoad(fp, image))
+    if (ImageLoad(fp, image) != 1) {
+        free(image);
+        fclose(fp);
         return -2;
+    }
 
     *width = image->sizeX;
     *height = image->sizeY;
@@ -118,6 +122,41 @@ int load_bmp(const char *path, unsigned char **out, unsigned long *width, unsign
 
     free(image);
     fclose(fp);
+    return 0;
+}
+
+int save_png(const char *path, const unsigned char *data, unsigned long width, unsigned long height) {
+    png_image image = {0};
+
+    image.version = PNG_IMAGE_VERSION;
+    image.width = width;
+    image.height = height;
+    image.format = PNG_FORMAT_RGB;
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp)
+        return -1;
+
+    int ok = png_image_write_to_stdio(&image, fp, 0, data, 0, NULL);
+
+    // A failed fclose means the last bytes never reached the disk
+    if (fclose(fp) != 0 || !ok)
+        return -2;
+
+    return 0;
+}
+
+int save_bmp(const char *path, const unsigned char *data, unsigned long width, unsigned long height) {
+    FILE *fp = fopen(path, "wb");
+    if (!fp)
+        return -1;
+
+    int res = writebmp_image(fp, data, width, height);
+
+    // A failed fclose means the last bytes never reached the disk
+    if (fclose(fp) != 0 || res != 0)
+        return -2;
+
     return 0;
 }
 
