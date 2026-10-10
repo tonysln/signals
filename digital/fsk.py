@@ -2,14 +2,14 @@
 
 import sys
 import ctypes
-from ctypes import POINTER, c_double, c_int, c_int32
+from ctypes import POINTER, c_double, c_int, c_void_p
 import logging
 logger = logging.getLogger(__name__)
 
 
 class FSKEncoder():
-	def __init__(self):
-		self.phase = 0.0
+    def __init__(self):
+        self.phase = 0.0
         self.clock = 0.0
         self.last_sample = 0
         self.SR = samp_rate
@@ -23,29 +23,30 @@ class FSKEncoder():
         self.space_hz = 2200
 
 
-	def encode(self):
-		pass
+    def encode(self):
+        # TODO tone generation, framing
+        pass
 
 
 
 class FSKDecoder():
-	def __init__(self):
-		pass
+    def __init__(self):
+        pass
 
 
     def load_libfft(self):
         lib = ctypes.CDLL('../lib/libfft.so')
-        lib.goertzel.argtypes = [POINTER(c_double), c_double, c_double, c_int]
-        lib.goertzel.restype = c_int32
-        # lib.hann.argtypes = [POINTER(c_double), c_int]
-        # lib.hann.restype = None
-        # lib.filter.argtypes = [POINTER(c_double), POINTER(c_double), c_int]
-        # lib.filter.restype = None
+        lib.goertzel_sums.argtypes = [c_void_p, c_int, c_double, c_double, POINTER(c_double)]
+        lib.goertzel_sums.restype = None
+        lib.goertzel.argtypes = [POINTER(c_double), c_int, c_double, c_double]
+        lib.goertzel.restype = c_double
         self.lib = lib
 
 
-	def decode(self):
-		pass
+    def decode(self):
+        # TODO read samples, compare mark and space tone power per bit
+        # (goertzel), bit timing, framing
+        pass
 
 
 

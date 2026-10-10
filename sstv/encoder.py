@@ -142,16 +142,6 @@ class MartinEncoder(Encoder):
 
             self.generate_tone(f_hz=self.t1_hz, t_ms=self.t1_ms)
 
-    def decode_sequence(self, sr):
-        yield int(round(sr * self.sync_ms)), 10
-        yield int(round(sr * self.t1_ms)), 11
-
-        for j in [1, 2, 0]:
-            for _ in range(0, self.enc["width"]):
-                yield int(round(sr * self.enc["t_pixel"])), j
-
-            yield int(round(sr * self.t1_ms)), 11
-
 
 class ScottieEncoder(Encoder):
     opts = {

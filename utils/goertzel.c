@@ -1,134 +1,48 @@
-/* goertzel_fixed -- Detect a single tone in an audio signal.
-   
-   Copyright (C) 2022 Remington Furman
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see https://www.gnu.org/licenses/.
+/*
+  goertzel.c
 
-   Source:
-   https://remcycles.net/blog/goertzel.html
+  Detects a single tone in an audio signal. Gives the same answer as the
+  Goertzel algorithm, the power of one frequency over a window of samples,
+  but from running sums, so that any window costs the same after one pass
+  over the signal.
+
+  Resources:
+  https://remcycles.net/blog/goertzel.html
+  https://en.wikipedia.org/wiki/Goertzel_algorithm
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
 #include <math.h>
-#include <complex.h>
+#include <stdint.h>
 
-/* These macros simplify working with signed fixed point numbers.
 
-   In this notation, only the fractional bits are tracked in the macro
-   names, so a Qm.n number is referred to as a Qn number, where n is
-   the number of fractional bits.  This also sidesteps the issue of
-   whether m includes the sign bit or not (ARM vs TI notation).
+void goertzel_sums(const int16_t *pcm, int n, double hz, double sr, double *sums) {
+    double w = 2 * M_PI * hz / sr;
 
-   The usual caveats of C preprocessor macros hold here.  Beware of
-   multiple evaluations, side effects, etc.
-*/
+    sums[0] = 0;
+    sums[1] = 0;
 
-/* Convert to and from doubles. */
-#define Qn_FROM_DOUBLE(value, n) (lrint((value) * (1 << (n))))
-#define DOUBLE_FROM_Qn(value, n) ((double)(value) / (1 << (n)))
+    for (int i = 0; i < n; i++) {
+        double x = pcm[i] / 32768.0;
 
-/* The number closest to +1.0 that can be represented. */
-#define ONE_Qn(n) ((1<<(n)) - 1)
-/* One half (0.5). */
-#define HALF_Qn(n) (1<<((n) - 1))
-
-/* Drop n bits from x (shift right) while rounding (add one half). */
-#define ROUND_OFF_Qn(x, n)                      \
-    ((n > 0) ? (((x) + HALF_Qn(n)) >> n) : (x))
-
-/* Multiply two Qn numbers, rounding to the precision of the first.
-   Make sure to cast one of the arguments to the size needed to avoid
-   overflow in the multiplication before shifting. */
-#define MUL_Qn_Qn(x, y, xn, yn)                 \
-    ROUND_OFF_Qn((x) * (y), (yn))
-
-/* Add two Qn numbers, using the precision of the first. */
-#define ADD_Qn_Qn(x, y, xn, yn)                 \
-    ((xn) > (yn) ? (x) + ((y) << ((xn)-(yn))) : \
-     (x) + ROUND_OFF_Qn((y), ((xn)-(yn))))
-
-typedef struct {
-    int16_t real;
-    int16_t imag;
-} cint16_t;
-
-/* Return a larger type here, because a complex point outside of the
-   unit circle will have a larger magnitude. */
-int32_t cint16_abs(cint16_t z) {
-    /* Cheat for now and use floating point sqrt(). */
-    return lrint(sqrt((double)z.real*(double)z.real +
-                      (double)z.imag*(double)z.imag));
-}
-
-int16_t read_sample(void) {
-    /* This function should read and return an audio sample from some
-       source. */
-    return 0;
-}
-
-int32_t goertzel(double *real, double detect_hz, double sample_rate_hz, int N) {
-    /* Notation from p. 710 of Lyons. */
-
-    /* Index of DFT frequency bin to calculate. */
-    const double m = (N * detect_hz) / sample_rate_hz;
-
-    /* This complex feedforward coefficient allows a single zero to
-       cancel one of the complex poles.  It can be calculated in
-       advance. */
-    const double complex dbl_coeff_ff = -cexp(-I*2*M_PI*m/N);
-
-    const int coeff_ff_Qn = 15;  /* Q1.15 */
-    cint16_t coeff_ff;
-    coeff_ff.real = Qn_FROM_DOUBLE(creal(dbl_coeff_ff), coeff_ff_Qn);
-    coeff_ff.imag = Qn_FROM_DOUBLE(cimag(dbl_coeff_ff), coeff_ff_Qn);
-
-    /* Feedback coefficient. */
-    double dbl_coeff_fb = 2*cos(2*M_PI*m/N);
-    const int coeff_fb_Qn = 14;  /* Q2.14 */
-    int16_t coeff_fb = Qn_FROM_DOUBLE(dbl_coeff_fb, coeff_fb_Qn);
-
-    const int w_Qn = 15;
-    int32_t w[3] = {0};         /* Delay line. Q17.15. */
-
-    for (int sample_index = 0; sample_index <= N; sample_index++) {
-        const int x_Qn = 15;  /* Q1.15. */
-        int16_t x = 0;
-
-        if (sample_index < N)
-            x = Qn_FROM_DOUBLE(real[sample_index], x_Qn);
-
-        /* Manually shift delay line and calculate next value. */
-        w[2] = w[1];
-        w[1] = w[0];
-
-        /* w[0] = x + (coeff_fb * w[1]) - w[2] */
-        w[0] = MUL_Qn_Qn((int64_t)w[1], (int64_t)coeff_fb, w_Qn, coeff_fb_Qn);
-        w[0] = ADD_Qn_Qn(w[0], x, w_Qn, x_Qn);
-        w[0] = ADD_Qn_Qn(w[0], -w[2], w_Qn, w_Qn);
+        sums[2 * i + 2] = sums[2 * i] + x * cos(w * i);
+        sums[2 * i + 3] = sums[2 * i + 1] + x * sin(w * i);
     }
+}
 
-    /* End of Goertzel alogorithm for this buffer. Apply the
-     * feedforward coefficient to generate final output. */
-    const int y_Qn = 5;
-    cint16_t y; /* y = w[0] + coeff_ff * w[1];  complex multiply. */
-    y.real = ROUND_OFF_Qn(w[0] +
-                          MUL_Qn_Qn((int64_t)coeff_ff.real, w[1],
-                                    coeff_ff_Qn, w_Qn), w_Qn - y_Qn);
-    y.imag = ROUND_OFF_Qn(
-        MUL_Qn_Qn((int64_t)coeff_ff.imag, w[1],
-                  coeff_ff_Qn, w_Qn), w_Qn - y_Qn);
+static double sum_at(const double *sums, int n, double x) {
+    if (x <= 0)
+        return sums[0];
+    if (x >= n)
+        return sums[2 * n];
 
-    int32_t dft_mag = cint16_abs(y);
+    int i = (int) x;
+    return sums[2 * i] + (x - i) * (sums[2 * i + 2] - sums[2 * i]);
+}
 
-    return dft_mag;
+double goertzel(const double *sums, int n, double a, double b) {
+    double re = sum_at(sums, n, b) - sum_at(sums, n, a);
+    double im = sum_at(sums + 1, n, b) - sum_at(sums + 1, n, a);
+    double half = (b - a) / 2;
+
+    return (re * re + im * im) / (half * half);
 }
