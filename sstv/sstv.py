@@ -86,104 +86,37 @@ def encode(img_path, out_path, encoding, mode, intro_tone, sr, wav):
     return True
 
 
-def decode(in_path, out_path, sr, wave, encoding, mode, intro):
+def decode(in_path, out_path, sr, wav, encoding, mode):
     iformat = out_path.split(".")[-1].upper()
     if iformat.lower() not in SV:
         logger.error(f"Output image format is not supported: {iformat} (supported: {', '.join(SV).upper()})")
         sys.exit(1)
 
-    logger.info(
-        f"Using input parameters: sr={sr} wave={wave} encoding={encoding} mode={mode} intro={intro}"
-    )
-    logger.info(f"Using output parameters: format={iformat}")
+    # The mode is read from the VIS code, unless encoding and mode are given
+    e = None
+    if encoding or mode:
+        if encoding not in ENCODERS or mode not in ENCODERS[encoding].opts:
+            logger.error("Unknown encoder or mode provided!")
+            sys.exit(1)
 
-    f = open(out_path, "wb")
+        e = ENCODERS[encoding](mode=mode)
+
+    d = DECODERS["General"]()
+
     try:
-        e = DECODERS["General"](f, encoding, mode, sr)
-    except AssertionError:
-        logger.error("Unknown encoder or mode provided!")
-        sys.exit(1)
+        if wav:
+            d.read_wav(in_path)
+        else:
+            d.read_raw(in_path, sr)
 
-    if wave:
-        e.read_wav(in_path)
+        w, h, data = d.decode(e)
+    except DecodeError as err:
+        logger.error(err)
+        sys.exit(2)
 
-    header_size = round(sr * 0.3) * 2 + round(sr * 0.01)
-    fax_head_size = round(sr * 0.00205) * 2 * 1220
-    intro_size = round(sr * 0.1) * 8
-    vis_size = round(sr * 0.03) * 10
-    fax_phint_size = (round(sr * 0.00512) + round(sr * 0.000512 * 512)) * 20
+    save_image(out_path, w, h, data)
 
-    elen = 0
-    if encoding != "FAX":
-        elen += header_size + vis_size
-    else:
-        elen += fax_head_size + fax_phint_size
-
-    if intro:
-        elen += intro_size
-
-    ns = e.find_nonsil()
-    print("expected len", elen, ns)
-    # i,data = e.process_header(ns, elen)
-    ns, data = e.process_image(ns, elen)
-    # print(data[:100])
-    freqs = []
-    for i in range(len(data) - 1):
-        x0, y0 = data[i]
-        for t in range(x0, data[i + 1][0]):
-            freqs.append(y0)
-
-    freqs.append(data[-1][1])
-
-    vox = None
-    header = None
-    vis = None
-    d_enc = None
-    d_mode = None
-    phint = None
-    j = ns
-    if intro:
-        j, vox = e.decode_vox(j, freqs)
-
-    j, header = e.decode_header(j, freqs, encoding == "FAX")
-
-    if encoding != "FAX":
-        j, vis = e.decode_VIS(j, freqs)
-    else:
-        j, phint = e.decode_phasing_interval(j, freqs)
-
-    print("j=", j)
-    print("vox/header/VIS/phint:")
-    print(vox, header, vis, phint)
-
-    if vis:
-        d_enc, d_mode = vis
-        print("Detected encode and mode:", d_enc, d_mode)
-
-    print("IMAGE:")
-    nns, data2 = e.process_image(j-500)
-    imgfreqs = []
-    for i in range(len(data2) - 1):
-        x0, y0 = data2[i]
-        for t in range(x0, data2[i + 1][0]):
-            imgfreqs.append(y0)
-
-    imgfreqs.append(data[-1][1])
-    # print(len(imgfreqs), imgfreqs[:500])
-    pixels = e.decode_image(d_enc, d_mode, j, imgfreqs)
-    print(len(pixels))
-    imbytes = []
-    for line in pixels:
-        imbytes.extend(line)
-    print(len(imbytes))
-
-    save_image(out_path, 320, 256, bytes(imbytes))
-
-    e.__del__()
-    if not wave and not f.closed:
-        f.close()
-
-    return False
+    return True
 
 
 def print_help():
@@ -253,7 +186,7 @@ if __name__ == "__main__":
 
         elif func == "--decode":
             logger.info(f"Decoding {in_path}...")
-            if decode(in_path, out_path, sr, wav, encoding, mode, intro):
+            if decode(in_path, out_path, sr, wav, encoding, mode):
                 logger.info(f"Wrote output to {out_path}")
 
     logger.info("Done.")
