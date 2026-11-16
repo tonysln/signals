@@ -32,6 +32,9 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 
 audio { display: block; width: 100%; }
 
+footer { font-size: 11px; }
+footer a { color: #666; }
+
 @media (max-width: 600px) {
   main { margin: 0; border: 0; }
   .field { grid-template-columns: 1fr; gap: 4px; }
