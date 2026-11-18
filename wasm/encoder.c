@@ -16,6 +16,12 @@
   Samples (signed 16-bit mono) are handed to the host in blocks through the
   imported function sstv_emit(ptr, count); the host copies them out.
 
+  Every tone is also tagged with what it encodes (enum kind) and handed over
+  as segments through sstv_marks(end, hz, kind, count): parallel arrays of
+  the end sample (uint32), the frequency in Hz (uint16) and the kind (uint8).
+  Consecutive tones of the same kind and frequency are merged. The browser
+  uses these for the signal visualisation only.
+
   Mode table: sstv_mode_count(), sstv_mode_family(i), sstv_mode_name(i),
   sstv_mode_width(i), sstv_mode_height(i).
 
@@ -32,6 +38,16 @@
 
 __attribute__((import_module("env"), import_name("sstv_emit")))
 extern void sstv_emit(const int16_t *samples, int count);
+
+__attribute__((import_module("env"), import_name("sstv_marks")))
+extern void sstv_marks(const uint32_t *end, const uint16_t *hz,
+                       const uint8_t *kind, int count);
+
+/* What a tone encodes; keep in sync with KINDS in worker.js */
+enum kind {
+    K_VOX, K_LEADER, K_VIS_START, K_VIS_1, K_VIS_0, K_SYNC, K_PORCH,
+    K_R, K_G, K_B, K_Y, K_RY, K_BY, K_MONO,
+};
 
 enum family { MARTIN, SCOTTIE, WRASSE, PASOKON, FAX, ROBOT, PD };
 
@@ -106,12 +122,46 @@ static uint8_t *image;
 static int16_t block[BLOCK];
 static int block_len;
 
+#define SEGS 4096
+static uint32_t seg_end[SEGS];
+static uint16_t seg_hz[SEGS];
+static uint8_t seg_kind[SEGS];
+static int seg_len;
+static enum kind cur_kind;  /* kind of the tones being generated */
+
 
 static void flush(void) {
     if (block_len) {
         sstv_emit(block, block_len);
         block_len = 0;
     }
+    if (seg_len) {
+        sstv_marks(seg_end, seg_hz, seg_kind, seg_len);
+        seg_len = 0;
+    }
+}
+
+static void mark(double f_hz, long end_sample) {
+    uint16_t hz = (uint16_t)nearbyint(f_hz);
+    if (seg_len && seg_kind[seg_len - 1] == cur_kind && seg_hz[seg_len - 1] == hz) {
+        seg_end[seg_len - 1] = (uint32_t)end_sample;
+        return;
+    }
+    if (seg_len == SEGS) {
+        sstv_marks(seg_end, seg_hz, seg_kind, seg_len);
+        seg_len = 0;
+    }
+    seg_end[seg_len] = (uint32_t)end_sample;
+    seg_hz[seg_len] = hz;
+    seg_kind[seg_len] = (uint8_t)cur_kind;
+    seg_len++;
+}
+
+/* Tone tagged with a kind */
+static void tone(double f_hz, double t_s);
+static void ktone(enum kind k, double f_hz, double t_s) {
+    cur_kind = k;
+    tone(f_hz, t_s);
 }
 
 /* Python's round(): half to even, which nearbyint() does by default */
@@ -133,6 +183,8 @@ static void tone(double f_hz, double t_s) {
             flush();
     }
 
+    if (total > 0)
+        mark(f_hz, end_sample);
     last_sample = end_sample;
 }
 
@@ -150,6 +202,7 @@ static double rgb_to_by(int r, int g, int b) {
 
 /* One colour channel (0=R, 1=G, 2=B) of a row, one tone per pixel */
 static void scan_channel(const uint8_t *line, int c, double t) {
+    cur_kind = c == 0 ? K_R : c == 1 ? K_G : K_B;
     for (int i = 0; i < m->width; i++)
         tone(LUM_B_HZ + line[i * 3 + c] * LUM_SCALE, t);
 }
@@ -157,6 +210,7 @@ static void scan_channel(const uint8_t *line, int c, double t) {
 enum yuv { Y, RY, BY };
 
 static void scan_yuv(const uint8_t *line, enum yuv which, double t) {
+    cur_kind = which == Y ? K_Y : which == RY ? K_RY : K_BY;
     for (int i = 0; i < m->width; i++) {
         const uint8_t *p = line + i * 3;
         double v = which == Y  ? rgb_to_y(p[0], p[1], p[2])
@@ -199,7 +253,7 @@ EXPORT int sstv_begin(int mode, int samp_rate) {
     phase = clock_s = 0;
     last_sample = 0;
     odd_line = first_line_done = 0;
-    block_len = 0;
+    block_len = seg_len = 0;
     return 0;
 }
 
@@ -208,38 +262,40 @@ EXPORT uint8_t *sstv_image(void) { return image; }
 EXPORT void sstv_intro(void) {
     static const int hz[] = {1900, 1500, 1900, 1500, 2300, 1500, 2300, 1500};
     for (int i = 0; i < 8; i++)
-        tone(hz[i], 0.1);
+        ktone(K_VOX, hz[i], 0.1);
 }
 
 EXPORT void sstv_header(void) {
     if (m->family == FAX) {
         for (int i = 0; i < 1220; i++) {
-            tone(2300, 0.00205);
-            tone(1500, 0.00205);
+            ktone(K_LEADER, 2300, 0.00205);
+            ktone(K_LEADER, 1500, 0.00205);
         }
         /* Phasing interval */
         for (int i = 0; i < 20; i++) {
-            tone(SYNC_HZ, 0.00512);
+            ktone(K_SYNC, SYNC_HZ, 0.00512);
+            cur_kind = K_MONO;
             for (int x = 0; x < m->width; x++)
                 tone(LUM_W_HZ, m->t_pixel);
         }
         return;
     }
 
-    tone(1900, 0.3);
-    tone(1200, 0.01);
-    tone(1900, 0.3);
+    ktone(K_LEADER, 1900, 0.3);
+    ktone(K_VIS_START, 1200, 0.01);
+    ktone(K_LEADER, 1900, 0.3);
 
     /* VIS: start bit, 7 data bits LSB first, even parity, stop bit */
-    tone(1200, 0.03);
+    ktone(K_VIS_START, 1200, 0.03);
     int ones = 0;
     for (int i = 0; i < 7; i++) {
         int bit = (m->vis >> i) & 1;
         ones += bit;
-        tone(bit ? 1100 : 1300, 0.03);
+        ktone(bit ? K_VIS_1 : K_VIS_0, bit ? 1100 : 1300, 0.03);
     }
-    tone(ones % 2 == 0 ? 1300 : 1100, 0.03);
-    tone(1200, 0.03);
+    int parity = ones % 2;
+    ktone(parity ? K_VIS_1 : K_VIS_0, parity ? 1100 : 1300, 0.03);
+    ktone(K_VIS_START, 1200, 0.03);
 }
 
 EXPORT void sstv_line(int y) {
@@ -251,46 +307,47 @@ EXPORT void sstv_line(int y) {
 
     switch (m->family) {
     case MARTIN:
-        tone(SYNC_HZ, 0.004862);
-        tone(PORCH_HZ, 0.000572);
+        ktone(K_SYNC, SYNC_HZ, 0.004862);
+        ktone(K_PORCH, PORCH_HZ, 0.000572);
         for (int c = 1, k = 0; k < 3; k++, c = (c + 1) % 3) {  /* G, B, R */
             scan_channel(line, c, t);
-            tone(PORCH_HZ, 0.000572);
+            ktone(K_PORCH, PORCH_HZ, 0.000572);
         }
         break;
 
     case SCOTTIE:
         if (!first_line_done) {
-            tone(SYNC_HZ, 0.009);
+            ktone(K_SYNC, SYNC_HZ, 0.009);
             first_line_done = 1;
         }
-        tone(PORCH_HZ, 0.0015);
+        ktone(K_PORCH, PORCH_HZ, 0.0015);
         scan_channel(line, 1, t);       /* G */
-        tone(PORCH_HZ, 0.0015);
+        ktone(K_PORCH, PORCH_HZ, 0.0015);
         scan_channel(line, 2, t);       /* B */
-        tone(SYNC_HZ, 0.009);
-        tone(PORCH_HZ, 0.0015);
+        ktone(K_SYNC, SYNC_HZ, 0.009);
+        ktone(K_PORCH, PORCH_HZ, 0.0015);
         scan_channel(line, 0, t);       /* R */
         break;
 
     case WRASSE:
-        tone(SYNC_HZ, 0.0055225);
-        tone(PORCH_HZ, 0.0005);
+        ktone(K_SYNC, SYNC_HZ, 0.0055225);
+        ktone(K_PORCH, PORCH_HZ, 0.0005);
         for (int c = 0; c < 3; c++)
             scan_channel(line, c, t);
         break;
 
     case PASOKON:
-        tone(SYNC_HZ, m->sync_ms);
-        tone(PORCH_HZ, m->t1_ms);
+        ktone(K_SYNC, SYNC_HZ, m->sync_ms);
+        ktone(K_PORCH, PORCH_HZ, m->t1_ms);
         for (int c = 0; c < 3; c++) {
             scan_channel(line, c, t);
-            tone(PORCH_HZ, m->t1_ms);
+            ktone(K_PORCH, PORCH_HZ, m->t1_ms);
         }
         break;
 
     case FAX:
-        tone(SYNC_HZ, 0.00512);
+        ktone(K_SYNC, SYNC_HZ, 0.00512);
+        cur_kind = K_MONO;
         for (int i = 0; i < m->width; i++) {
             const uint8_t *p = line + i * 3;
             double mono = 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2];
@@ -299,34 +356,34 @@ EXPORT void sstv_line(int y) {
         break;
 
     case ROBOT:
-        tone(SYNC_HZ, 0.009);
-        tone(PORCH_HZ, 0.003);
+        ktone(K_SYNC, SYNC_HZ, 0.009);
+        ktone(K_PORCH, PORCH_HZ, 0.003);
         scan_yuv(line, Y, t);
         if (m->vis == 8) {  /* Robot 36: alternate R-Y / B-Y */
             if (odd_line) {
-                tone(2300, 0.0045);
-                tone(1900, 0.0015);
+                ktone(K_PORCH, 2300, 0.0045);
+                ktone(K_PORCH, 1900, 0.0015);
                 scan_yuv(line, BY, m->by_scan);
             } else {
-                tone(1500, 0.0045);
-                tone(1900, 0.0015);
+                ktone(K_PORCH, 1500, 0.0045);
+                ktone(K_PORCH, 1900, 0.0015);
                 scan_yuv(line, RY, m->ry_scan);
             }
             odd_line = !odd_line;
         } else {            /* Robot 72 */
-            tone(1500, 0.0045);
-            tone(1900, 0.0015);
+            ktone(K_PORCH, 1500, 0.0045);
+            ktone(K_PORCH, 1900, 0.0015);
             scan_yuv(line, RY, m->ry_scan);
-            tone(2300, 0.0045);
-            tone(1500, 0.0015);
+            ktone(K_PORCH, 2300, 0.0045);
+            ktone(K_PORCH, 1500, 0.0015);
             scan_yuv(line, BY, m->by_scan);
         }
         break;
 
     case PD:
         if (odd_line) {
-            tone(SYNC_HZ, 0.02);
-            tone(PORCH_HZ, 0.00208);
+            ktone(K_SYNC, SYNC_HZ, 0.02);
+            ktone(K_PORCH, PORCH_HZ, 0.00208);
             scan_yuv(line, Y, t);
             scan_yuv(line, RY, t);
             scan_yuv(line, BY, t);

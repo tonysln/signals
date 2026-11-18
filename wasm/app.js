@@ -4,6 +4,7 @@ const resize = $("resize"), preview = $("preview"), dims = $("dims");
 const go = $("go"), status = $("status"), log = $("log");
 const result = $("result"), player = $("player"), audio = $("audio");
 const download = $("download"), kind = $("kind");
+const signal = $("signal"), strip = $("strip");
 
 const worker = new Worker("worker.js");
 
@@ -12,10 +13,14 @@ let wavUrl = null;
 let busy = false;
 let ready = false;
 let job = null;  // { resolve, reject } of the running encode
+let shown = null;  // strip on the canvas: { img, bg, sr, grids, live }
+let frame = 0;     // pending animation frame while playing
 
 // Drop any previous output so nothing on screen belongs to old settings.
 function clearResult() {
   result.hidden = true;
+  signal.hidden = true;
+  shown = null;
   audio.pause();
   audio.removeAttribute("src");
   audio.load();
@@ -27,6 +32,57 @@ function clearResult() {
   log.replaceChildren();
   log.hidden = true;
 }
+
+
+function drawStrip(s, live) {
+  if (!s) return;
+  strip.width = s.width;
+  strip.height = s.height;
+  const img = new ImageData(new Uint8ClampedArray(s.pixels), s.width, s.height);
+  live = live && !!s.grids;
+  let dim = null;
+  if (live) {
+    dim = new ImageData(new Uint8ClampedArray(img.data), s.width, s.height);
+    const d = dim.data;
+    for (let i = 0; i < d.length; i += 4) {
+      for (let c = 0; c < 3; c++) d[i + c] = s.bg[c] + (d[i + c] - s.bg[c]) * 0.25;
+    }
+  }
+  shown = { img, dim, sr: s.sr, grids: s.grids, live, playing: false };
+  reveal();
+  signal.hidden = false;
+}
+
+// Paint the strip up to the current playback position.
+function reveal() {
+  if (!shown) return;
+  const { img, dim, sr, grids, live } = shown;
+  const ctx = strip.getContext("2d");
+  if (!live || !shown.playing) { ctx.putImageData(img, 0, 0); return; }
+  ctx.putImageData(dim, 0, 0);
+  const t = audio.currentTime * sr;
+  for (const g of grids) {
+    const pos = Math.min(g.rows, Math.max(0, (t - g.origin) / g.period));
+    const full = Math.floor(pos);
+    if (full) ctx.putImageData(img, 0, 0, 0, g.y0, img.width, full * g.thick);
+    const part = Math.floor((pos - full) * img.width);
+    if (full < g.rows && part) {
+      ctx.putImageData(img, 0, 0, 0, g.y0 + full * g.thick, part, g.thick);
+    }
+  }
+}
+
+function tick() {
+  reveal();
+  frame = audio.paused ? 0 : requestAnimationFrame(tick);
+}
+
+audio.addEventListener("play", () => {
+  if (shown) shown.playing = true;
+  if (!frame) frame = requestAnimationFrame(tick);
+});
+audio.addEventListener("seeked", reveal);
+audio.addEventListener("ended", reveal);
 
 function setStatus(text, cls = "") {
   status.textContent = text;
@@ -163,6 +219,7 @@ form.addEventListener("submit", async (e) => {
     download.download = out.name;
     download.textContent = out.name;
     result.hidden = false;
+    drawStrip(out.strip, !out.raw);
     setStatus("Done.", "ok");
     addLog("Done.");
   } catch (err) {

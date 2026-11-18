@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="wrap">
   <main>
     <header class="pane">
       <h1>SSTV Encoder</h1>
@@ -97,6 +98,11 @@
       <a href="https://github.com/tonysln/signals" target="_blank" rel="noopener">Github</a>
     </footer>
   </main>
+
+  <aside id="signal" hidden>
+    <canvas id="strip" aria-hidden="true"></canvas>
+  </aside>
+  </div>
 
   <script src="app.js"></script>
 </body>

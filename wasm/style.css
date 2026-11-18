@@ -3,7 +3,13 @@
 
 body { margin: 0; background: #ccc; font: 13px/1.5 sans-serif; }
 
-main { max-width: 890px; margin: 32px; background: #eee; border: 1px solid #888; }
+main { flex: 1 1 auto; min-width: 0; max-width: 890px; background: #eee; border: 1px solid #888; }
+
+/* Form and signal strip side by side */
+.wrap { display: flex; align-items: stretch; gap: 16px; margin: 32px; max-width: 1066px; }
+
+#signal { flex: 0 0 160px; display: flex; flex-direction: column; }
+#strip { display: block; flex: 1 1 0; min-height: 320px; width: 100%; image-rendering: pixelated; background: #0f111a; border: 1px solid #000; }
 
 .pane { padding: 16px 20px; }
 .pane + .pane { border-top: 1px solid #888; }
@@ -36,7 +42,10 @@ footer { font-size: 11px; }
 footer a { color: #666; }
 
 @media (max-width: 600px) {
-  main { margin: 0; border: 0; }
+  .wrap { flex-direction: column; margin: 0; gap: 0; }
+  main { border: 0; }
+  #signal { flex: none; }
+  #strip { flex: none; height: 360px; min-height: 0; }
   .field { grid-template-columns: 1fr; gap: 4px; }
   #preview { margin-left: 0; max-width: 100%; }
 }
